@@ -729,7 +729,7 @@ function refreshUI(force) {
     $('#stExplores').textContent = S.explores.toLocaleString('ja-JP');
     $('#stCap').textContent = offlineCapHours() + '時間';
     $('#stStart').textContent = new Date(S.created).toLocaleDateString('ja-JP');
-    $('#soundBtn').textContent = S.muted ? '音：OFF' : '音：ON';
+    $('#soundBtn').textContent = S.muted ? '音：OFF（タップでON）' : '音：ON（タップでOFF）';
   }
 }
 
@@ -1121,6 +1121,7 @@ function start() {
   buildCompanions();
   buildRebirth();
   setupVolume();
+  setupSheets();
   setupRanking();
   setupStepEvent();
   setupTabs();

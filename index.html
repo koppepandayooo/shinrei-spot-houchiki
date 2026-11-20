@@ -26,6 +26,10 @@
           <span id="film">0</span><small>フィルム</small>
         </div>
         <div class="rates">探索 <b id="rate">0</b>/秒　撮影 <b id="clickVal">1</b>/回</div>
+        <div class="top-btns">
+          <button type="button" class="icon-btn" id="btnRank" aria-label="ランキング" title="ランキング"><img id="icoRank" alt=""></button>
+          <button type="button" class="icon-btn" id="btnSettings" aria-label="設定" title="設定"><img id="icoSettings" alt=""></button>
+        </div>
       </header>
 
       <section class="scene-wrap" id="sceneWrap" aria-label="ゲーム画面（タップで撮影）">
@@ -57,34 +61,11 @@
         <button type="button" data-tab="companions" id="tabBtnComp">仲間</button>
         <button type="button" data-tab="spots" id="tabBtnSpots">スポット</button>
         <button type="button" data-tab="records" id="tabBtnRecords">記録</button>
-        <button type="button" data-tab="ranking" id="tabBtnRank">ランク</button>
       </nav>
 
       <div class="tab-body" id="tab-upgrades"></div>
       <div class="tab-body hidden" id="tab-companions"></div>
       <div class="tab-body hidden" id="tab-spots"></div>
-      <div class="tab-body hidden" id="tab-ranking">
-        <div class="card hidden" id="rankOff">
-          <h3>オンラインランキング</h3>
-          <p class="note">ランキングは準備中です。（管理者向け：worker フォルダの手順でサーバーを用意し、js/config.js に URL を設定すると使えるようになります）</p>
-        </div>
-        <div class="hidden" id="rankOn">
-          <div class="card rank-me">
-            <h3>名前を登録してスコアを送信</h3>
-            <p class="note">スコアは「総獲得フィルム」です。ログインは不要で、この端末に名前が保存されます（12文字まで）。</p>
-            <div class="rank-form">
-              <input type="text" id="rankName" maxlength="12" placeholder="名前" autocomplete="nickname">
-              <button type="button" class="btn affordable" id="rankSend">送信</button>
-            </div>
-            <p class="note">いまのスコア：<b id="rankScore">0</b>　<span id="rankMine"></span></p>
-            <p class="code-msg" id="rankMsg"></p>
-          </div>
-          <div class="card">
-            <h3>ランキング TOP50 <button type="button" class="btn small" id="rankReload">更新</button></h3>
-            <ol class="rank-list" id="rankList"></ol>
-          </div>
-        </div>
-      </div>
       <div class="tab-body hidden" id="tab-records">
         <div class="card records">
           <dl>
@@ -108,23 +89,6 @@
           <h3>探索ノート</h3>
           <ul class="log-list" id="logList"></ul>
         </div>
-        <div class="card settings">
-          <button type="button" class="btn" id="soundBtn">効果音：ON</button>
-          <div class="vol-row"><label for="volSfx">効果音の音量</label><input type="range" id="volSfx" min="0" max="100" step="5"><span id="volSfxVal">70%</span></div>
-          <div class="vol-row"><label for="volAmb">環境音の音量</label><input type="range" id="volAmb" min="0" max="100" step="5"><span id="volAmbVal">70%</span></div>
-          <button type="button" class="btn danger" id="resetBtn">データを削除</button>
-          <p class="note">セーブはこのブラウザ（localStorage）に自動で保存されます。</p>
-        </div>
-        <div class="card savecode">
-          <h3>セーブコード（引っ越し・バックアップ）</h3>
-          <p class="note">「書き出す」で表示される文字列をメモ帳などに保管しておくと、別のブラウザやスマホに貼り付けて続きから遊べます。</p>
-          <textarea id="codeBox" rows="4" spellcheck="false" autocomplete="off" placeholder="ここにセーブコードが表示されます／読み込むコードを貼り付けてください"></textarea>
-          <div class="code-btns">
-            <button type="button" class="btn" id="exportBtn">書き出す（コピー）</button>
-            <button type="button" class="btn" id="importBtn">読み込む</button>
-          </div>
-          <p class="code-msg" id="codeMsg"></p>
-        </div>
       </div>
     </section>
 
@@ -133,6 +97,65 @@
     </footer>
   </div>
 
+  <div class="sheet hidden" id="settingsPanel" role="dialog" aria-modal="true" aria-label="設定">
+    <div class="sheet-box">
+      <div class="sheet-head"><h2>設定</h2><button type="button" class="sheet-close" aria-label="閉じる">×</button></div>
+      <div class="sheet-body">
+        <div class="card settings">
+          <h3>音</h3>
+          <button type="button" class="btn" id="soundBtn">効果音：ON</button>
+          <div class="vol-row"><label for="volSfx">効果音の音量</label><input type="range" id="volSfx" min="0" max="100" step="5"><span id="volSfxVal">70%</span></div>
+          <div class="vol-row"><label for="volAmb">環境音の音量</label><input type="range" id="volAmb" min="0" max="100" step="5"><span id="volAmbVal">70%</span></div>
+        </div>
+        <div class="card savecode">
+          <h3>セーブデータ</h3>
+          <p class="note">セーブはこのブラウザに自動で保存されます。「書き出す」で表示される文字列（セーブコード）をメモ帳などに保管しておくと、別のブラウザやスマホに貼り付けて続きから遊べます。</p>
+          <textarea id="codeBox" rows="4" spellcheck="false" autocomplete="off" placeholder="ここにセーブコードが表示されます／読み込むコードを貼り付けてください"></textarea>
+          <div class="code-btns">
+            <button type="button" class="btn" id="exportBtn">書き出す（コピー）</button>
+            <button type="button" class="btn" id="importBtn">読み込む</button>
+          </div>
+          <p class="code-msg" id="codeMsg"></p>
+        </div>
+        <div class="card danger-zone">
+          <h3>データの削除</h3>
+          <p class="note">セーブを消して最初からやり直します。元に戻せないので、先にセーブコードを書き出しておくと安心です。</p>
+          <button type="button" class="btn danger" id="resetBtn">データを削除</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="sheet hidden" id="rankPanel" role="dialog" aria-modal="true" aria-label="ランキング">
+    <div class="sheet-box">
+      <div class="sheet-head"><h2>ランキング</h2><button type="button" class="sheet-close" aria-label="閉じる">×</button></div>
+      <div class="sheet-body">
+        <div class="card hidden" id="rankOff">
+          <h3>オンラインランキング</h3>
+          <p class="note">ランキングは準備中です。（管理者向け：worker フォルダの手順でサーバーを用意し、js/config.js に URL を設定すると使えるようになります）</p>
+        </div>
+        <div class="hidden" id="rankOn">
+          <div class="card rank-me">
+            <h3 id="rankHead">名前を登録して参加</h3>
+            <p class="note" id="rankNote">スコアは「総獲得フィルム」です。ログインは不要で、名前を登録すると、あとは自動で送信されます（12文字まで）。</p>
+            <div class="rank-form" id="rankForm">
+              <input type="text" id="rankName" maxlength="12" placeholder="名前" autocomplete="nickname">
+              <button type="button" class="btn affordable" id="rankSend">登録</button>
+            </div>
+            <div class="rank-joined hidden" id="rankJoined">
+              <span><b id="rankMeName"></b> として参加中</span>
+              <button type="button" class="btn small" id="rankRename">名前を変更</button>
+            </div>
+            <p class="note">いまのスコア：<b id="rankScore">0</b>　<span id="rankMine"></span></p>
+            <p class="code-msg" id="rankMsg"></p>
+          </div>
+          <div class="card">
+            <h3>ランキング TOP50 <button type="button" class="btn small" id="rankReload">更新</button></h3>
+            <ol class="rank-list" id="rankList"></ol>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
   <div class="modal hidden" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal-box">
       <h2 id="modalTitle"></h2>

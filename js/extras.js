@@ -61,7 +61,8 @@ function refreshCompanions() {
     const e = compEls[c.id];
     if (!e) return;
     const lv = S.comp[c.id];
-    const locked = S.unlocked < c.req;
+    // 一度仲間になったら、転生でスポットが最初に戻っても仲間のまま（ロック表示にしない）
+    const locked = S.comp[c.id] === 0 && S.unlocked < c.req;
     e.el.classList.toggle('locked', locked);
     e.el.classList.toggle('joined', lv > 0);
     const pic = Sprites.compImage(c.id);
@@ -98,7 +99,7 @@ function refreshCompanions() {
 }
 function joinCompanion(id) {
   const c = COMPANIONS.find((x) => x.id === id);
-  if (!c || S.unlocked < c.req || S.comp[id] >= c.max) return;
+  if (!c || (S.comp[id] === 0 && S.unlocked < c.req) || S.comp[id] >= c.max) return;
   const cost = compCost(c);
   if (S.film < cost) return;
   S.film -= cost;
@@ -195,6 +196,7 @@ function doRebirth() {
   checkAchievements();
   refreshUI(true);
   save();
+  autoSubmit();
 }
 
 /* ---------- 音量 ---------- */
@@ -255,9 +257,46 @@ function checkDaily() {
   save();
 }
 
-/* ---------- オンラインランキング（Cloudflare Workers に送る） ---------- */
+/* ---------- 設定・ランキングのパネル（ヘッダーのボタンで開く） ---------- */
+function openSheet(id) {
+  document.querySelectorAll('.sheet').forEach((s) => s.classList.add('hidden'));
+  $('#' + id).classList.remove('hidden');
+  document.body.classList.add('sheet-open');
+}
+function closeSheets() {
+  document.querySelectorAll('.sheet').forEach((s) => s.classList.add('hidden'));
+  document.body.classList.remove('sheet-open');
+}
+function setupSheets() {
+  $('#icoSettings').src = Sprites.iconURL('gear');
+  $('#icoRank').src = Sprites.iconURL('trophy');
+  $('#btnSettings').addEventListener('click', () => {
+    refreshUI(true);
+    openSheet('settingsPanel');
+  });
+  $('#btnRank').addEventListener('click', openRanking);
+  document.querySelectorAll('.sheet').forEach((sheet) => {
+    sheet.querySelector('.sheet-close').addEventListener('click', closeSheets);
+    // 外側（暗いところ）をタップしても閉じる
+    sheet.addEventListener('click', (e) => {
+      if (e.target === sheet) closeSheets();
+    });
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeSheets();
+  });
+}
+
+/* ---------- オンラインランキング（Cloudflare Workers に送る） ----------
+ * 名前を一度登録すれば、あとは自動で送信する：
+ *  - ランキングを開いたとき
+ *  - 5分ごと（スコアが増えていれば）
+ *  - 転生したとき
+ *  - ゲームを閉じる・別のアプリに切り替えるとき */
 let rankBusy = false;
-let rankAutoT = 0;
+let rankLastScore = -1; // 最後に送ったスコア
+let rankLastAt = 0; // 最後に送った時刻
+const RANK_MIN_GAP = 25 * 1000; // サーバーの制限（20秒）より少し長く
 function ensurePlayerId() {
   if (S.playerId) return S.playerId;
   S.playerId =
@@ -269,11 +308,12 @@ function ensurePlayerId() {
         });
   return S.playerId;
 }
+const rankURL = (path) => RANKING_API.replace(/\/$/, '') + path;
 async function rankFetch(path, opts = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 8000);
   try {
-    const res = await fetch(RANKING_API.replace(/\/$/, '') + path, { ...opts, signal: ctrl.signal });
+    const res = await fetch(rankURL(path), { ...opts, signal: ctrl.signal });
     const data = await res.json().catch(() => ({}));
     return { status: res.status, data };
   } finally {
@@ -285,68 +325,135 @@ function rankMsg(text, ok) {
   el.textContent = text;
   el.className = 'code-msg ' + (ok ? 'ok' : 'ng');
 }
+function scorePayload() {
+  return JSON.stringify({
+    id: ensurePlayerId(),
+    name: S.playerName,
+    score: Math.floor(S.total),
+    spot: S.unlocked,
+    rebirths: S.rebirths,
+    photos: S.ghosts,
+  });
+}
+function updateRankUI(editing) {
+  const joined = !!S.playerName && !editing;
+  $('#rankForm').classList.toggle('hidden', joined);
+  $('#rankJoined').classList.toggle('hidden', !joined);
+  $('#rankHead').textContent = joined ? 'ランキングに参加中' : S.playerName ? '名前を変更' : '名前を登録して参加';
+  $('#rankNote').textContent = joined
+    ? 'スコア（総獲得フィルム）は自動で送信されます。送信ボタンを押す必要はありません。'
+    : 'スコアは「総獲得フィルム」です。ログインは不要で、名前を登録すると、あとは自動で送信されます（12文字まで）。';
+  $('#rankMeName').textContent = S.playerName;
+  $('#rankSend').textContent = S.playerName ? '変更' : '登録';
+  if (!joined) $('#rankName').value = S.playerName;
+}
 function setupRanking() {
   const enabled = !!RANKING_API;
   $('#rankOff').classList.toggle('hidden', enabled);
   $('#rankOn').classList.toggle('hidden', !enabled);
-  $('#rankName').value = S.playerName;
+  updateRankUI(false);
   if (!enabled) return;
-  $('#rankSend').addEventListener('click', () => submitScore(true));
+  $('#rankSend').addEventListener('click', registerName);
+  $('#rankName').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') registerName();
+  });
+  $('#rankRename').addEventListener('click', () => {
+    updateRankUI(true);
+    $('#rankName').focus();
+  });
   $('#rankReload').addEventListener('click', loadRanking);
-  // ランキングタブを開いたときに読み込む
-  document.querySelector('.tabs button[data-tab="ranking"]').addEventListener('click', loadRanking);
-  // 名前を登録済みなら、10分ごとに自動で送信
+  // 5分ごとに、スコアが増えていれば自動送信
   setInterval(() => {
-    rankAutoT++;
-    if (S.playerName && !document.hidden) submitScore(false);
-  }, 10 * 60 * 1000);
+    if (!document.hidden) autoSubmit();
+  }, 5 * 60 * 1000);
+  // ゲームを閉じる・裏に回すときにも送る（ページが閉じても届く sendBeacon を使う）
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) beaconSubmit();
+  });
+  window.addEventListener('pagehide', beaconSubmit);
 }
 function cleanName(s) {
-  return String(s)
-    .replace(/[\u0000-\u001f\u007f<>]/g, '')
-    .trim()
-    .slice(0, 12);
+  return Array.from(
+    String(s)
+      .replace(/[\u0000-\u001f\u007f<>]/g, '')
+      .trim()
+  )
+    .slice(0, 12)
+    .join('');
 }
-async function submitScore(manual) {
-  if (!RANKING_API || rankBusy) return;
-  const name = cleanName(manual ? $('#rankName').value : S.playerName);
+async function registerName() {
+  const name = cleanName($('#rankName').value);
   if (!name) {
-    if (manual) rankMsg('名前を入力してください（12文字まで）。', false);
+    rankMsg('名前を入力してください（12文字まで）。', false);
     return;
   }
   S.playerName = name;
-  $('#rankName').value = name;
+  save();
+  updateRankUI(false);
+  rankLastAt = 0; // 名前の変更はすぐ送る
+  await submitScore(true);
+  await loadRanking();
+}
+// スコアが増えていて、前回から少し時間がたっていれば送る
+function autoSubmit() {
+  if (!RANKING_API || !S.playerName) return;
+  if (Math.floor(S.total) <= rankLastScore) return;
+  if (Date.now() - rankLastAt < RANK_MIN_GAP) return;
+  submitScore(false);
+}
+function beaconSubmit() {
+  if (!RANKING_API || !S.playerName || !navigator.sendBeacon) return;
+  if (Math.floor(S.total) <= rankLastScore || Date.now() - rankLastAt < RANK_MIN_GAP) return;
+  // text/plain で送ると事前確認（プリフライト）なしで届く。サーバーは中身を JSON として読む
+  const ok = navigator.sendBeacon(rankURL('/api/score'), new Blob([scorePayload()], { type: 'text/plain' }));
+  if (ok) {
+    rankLastScore = Math.floor(S.total);
+    rankLastAt = Date.now();
+  }
+}
+async function submitScore(manual) {
+  if (!RANKING_API || rankBusy || !S.playerName) return;
+  if (!manual && Date.now() - rankLastAt < RANK_MIN_GAP) return;
   rankBusy = true;
+  const score = Math.floor(S.total);
   if (manual) rankMsg('送信中…', true);
   try {
     const { status, data } = await rankFetch('/api/score', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: ensurePlayerId(),
-        name,
-        score: Math.floor(S.total),
-        spot: S.unlocked,
-        rebirths: S.rebirths,
-        photos: S.ghosts,
-      }),
+      body: scorePayload(),
     });
     if (status === 200 && data.ok) {
-      S.ranked = true;
-      if (manual) rankMsg(`送信しました！ いまの順位：${data.rank}位`, true);
-      checkAchievements();
-      save();
-      if (manual) await loadRanking();
+      rankLastScore = score;
+      rankLastAt = Date.now();
+      if (!S.ranked) {
+        S.ranked = true;
+        checkAchievements();
+        save();
+      }
+      if (manual) rankMsg(`登録しました！ いまの順位：${data.rank}位（このあとは自動で送信されます）`, true);
     } else if (status === 429) {
-      if (manual) rankMsg('送信が早すぎます。少し待ってからもう一度どうぞ。', false);
-    } else {
-      if (manual) rankMsg(`送信できませんでした（${data.error || status}）。`, false);
+      rankLastAt = Date.now();
+      if (manual) rankMsg('少し前に送信したばかりです。しばらくすると自動で送られます。', true);
+    } else if (manual) {
+      rankMsg(`送信できませんでした（${data.error || status}）。`, false);
     }
   } catch (e) {
     if (manual) rankMsg('サーバーにつながりませんでした。時間をおいて試してください。', false);
   } finally {
     rankBusy = false;
   }
+}
+async function openRanking() {
+  openSheet('rankPanel');
+  updateRankUI(false);
+  if (!RANKING_API) return;
+  $('#rankMsg').textContent = '';
+  // 参加中なら、最新のスコアを送ってからランキングを表示
+  if (S.playerName && Math.floor(S.total) > rankLastScore && Date.now() - rankLastAt >= RANK_MIN_GAP) {
+    await submitScore(false);
+  }
+  await loadRanking();
 }
 const SPOT_SHORT = ['旧小峰', '道了堂', '八王子城', '旧吹上', '旧旧吹上'];
 async function loadRanking() {
@@ -376,7 +483,7 @@ async function loadRanking() {
       li.append(no, nm, meta, sc);
       list.appendChild(li);
     });
-    $('#rankMine').textContent = data.me ? `あなたの順位：${data.me.rank}位（${fmt(data.me.score)}）` : 'まだ登録されていません';
+    $('#rankMine').textContent = data.me ? `あなたの順位：${data.me.rank}位（${fmt(data.me.score)}）` : S.playerName ? '' : 'まだ参加していません';
   } catch (e) {
     list.innerHTML = '<li class="rank-empty">ランキングを読み込めませんでした。</li>';
   }

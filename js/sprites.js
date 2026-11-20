@@ -728,6 +728,31 @@ const COMP_SPRITES = {
   },
 };
 
+ICONS.gear = [
+  '....oo....',
+  '.o.offo.o.',
+  '..offffo..',
+  '.offooffo.',
+  'offo..offo',
+  'offo..offo',
+  '.offooffo.',
+  '..offffo..',
+  '.o.offo.o.',
+  '....oo....',
+];
+ICONS.trophy = [
+  '.oooooooo.',
+  'oyyyyyyyyo',
+  'oyyWyyyyyo',
+  '.oyWyyyyo.',
+  '..oyyyyo..',
+  '...oyyo...',
+  '....yy....',
+  '...oyyo...',
+  '..oyyyyo..',
+  '..oooooo..',
+];
+
 const ICON_PAL = {
   o: '#9a93bd', c: '#3a3848', y: '#ffe066', W: '#ffffff', f: '#c9c9d1', F: '#fff3a8',
   r: '#d0384e', l: '#7fb2e0', w: '#efe8d6', R: '#ff8090', g: '#46c06a',
