@@ -1,0 +1,9 @@
+# 手元だけに置くもの（公開しない）
+yura.png
+tools/
+.claude/
+
+# OS・エディタのゴミ
+Thumbs.db
+desktop.ini
+.DS_Store
