@@ -872,3 +872,33 @@ body.sheet-open { overflow: hidden; }
   }
   .rank-board.desk .rank-mini .rank-meta { display: inline; }
 }
+
+/* ---------- ランキング：参加者が少ないうちは PC で1行の細い帯 ---------- */
+@media (min-width: 860px) {
+  .rank-board.desk.slim { display: flex; align-items: center; gap: 14px; padding: 6px 12px; }
+  .rank-board.desk.slim .rank-board-head { display: contents; }
+  .rank-board.desk.slim h3 { order: 0; flex: none; }
+  .rank-board.desk.slim .rb-list { order: 1; flex: 1; min-width: 0; }
+  .rank-board.desk.slim .rb-me { order: 2; flex: none; }
+  .rank-board.desk.slim .rb-open { order: 3; }
+  .rank-board.desk.slim .rank-mini { display: flex; gap: 18px; overflow: hidden; }
+  .rank-board.desk.slim .rank-row { display: flex; gap: 6px; border: none; padding: 0; white-space: nowrap; }
+  .rank-board.desk.slim .rank-row:nth-child(n + 4),
+  .rank-board.desk.slim .rank-meta { display: none; }
+  .rank-board.desk.slim .rank-name { max-width: 10em; }
+  .rank-board.desk.slim .rank-empty { padding: 0; }
+}
+
+/* ---------- 別のタブで開かれたときの一時停止 ---------- */
+.tab-lock {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.tab-lock h2 { margin: 0 0 10px; font-size: 18px; font-weight: normal; color: var(--ghost); }
+.tab-lock p { font-size: 13px; line-height: 1.7; margin: 0 0 14px; }

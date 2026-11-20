@@ -398,13 +398,13 @@ async function registerName() {
 }
 // スコアが増えていて、前回から少し時間がたっていれば送る
 function autoSubmit() {
-  if (!RANKING_API || !S.playerName) return;
+  if (!RANKING_API || !S.playerName || tabPaused) return;
   if (Math.floor(S.total) <= rankLastScore) return;
   if (Date.now() - rankLastAt < RANK_MIN_GAP) return;
   submitScore(false);
 }
 function beaconSubmit() {
-  if (!RANKING_API || !S.playerName || !navigator.sendBeacon) return;
+  if (!RANKING_API || !S.playerName || !navigator.sendBeacon || tabPaused) return;
   if (Math.floor(S.total) <= rankLastScore || Date.now() - rankLastAt < RANK_MIN_GAP) return;
   // text/plain で送ると事前確認（プリフライト）なしで届く。サーバーは中身を JSON として読む
   const ok = navigator.sendBeacon(rankURL('/api/score'), new Blob([scorePayload()], { type: 'text/plain' }));
@@ -482,8 +482,25 @@ function renderRankRows(list, entries) {
     list.appendChild(li);
   });
 }
+// データ削除のとき、ランキングの自分の記録も消す
+async function deleteRankingEntry(id) {
+  try {
+    const { status } = await rankFetch('/api/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    return status === 200;
+  } catch (e) {
+    return false;
+  }
+}
 // 常に表示するランキング（上位10人と自分の順位）
+// 参加者が少ないうちは、PCでは1行の細い帯にする
+const BOARD_FULL_FROM = 4; // この人数以上で2列の大きい表示
 function renderBoard(data) {
+  const few = data.entries.length < BOARD_FULL_FROM;
+  document.querySelectorAll('.rank-board').forEach((b) => b.classList.toggle('slim', few));
   document.querySelectorAll('.rb-list').forEach((el) => renderRankRows(el, data.entries.slice(0, 10)));
   const me = data.me ? `${S.playerName || 'あなた'}：${data.me.rank}位` : S.playerName ? '' : '未参加';
   document.querySelectorAll('.rb-me').forEach((el) => (el.textContent = me));

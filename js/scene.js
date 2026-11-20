@@ -320,48 +320,49 @@ const Scene = (() => {
     rect(x - 2, GY - 27, 4, 1, S);
     rect(x - 1, GY - 29, 2, 2, D);
   }
-  function jizo(x, th) {
+  function jizo(x, th, base = GY) {
     x = Math.round(x);
-    rect(x - 4, GY - 2, 8, 2, th.stoneDark);
-    rect(x - 3, GY - 9, 6, 7, th.stone);
-    rect(x - 2, GY - 13, 4, 4, th.stone);
-    rect(x - 1, GY - 14, 2, 1, th.stone);
-    rect(x - 3, GY - 9, 6, 3, '#8a2a30');
-    rect(x - 1, GY - 12, 1, 1, th.stoneDark);
-    rect(x + 1, GY - 12, 1, 1, th.stoneDark);
+    rect(x - 4, base - 2, 8, 2, th.stoneDark);
+    rect(x - 3, base - 9, 6, 7, th.stone);
+    rect(x - 2, base - 13, 4, 4, th.stone);
+    rect(x - 1, base - 14, 2, 1, th.stone);
+    rect(x - 3, base - 9, 6, 3, '#8a2a30');
+    rect(x - 1, base - 12, 1, 1, th.stoneDark);
+    rect(x + 1, base - 12, 1, 1, th.stoneDark);
   }
-  function hall(cx, baseY, th, t, k) {
-    const sil = '#0a0812';
-    const rim = '#2c2444';
-    // 縁と柱
-    rect(cx - 24, baseY - 2, 48, 2, sil);
-    rect(cx - 20, baseY - 15, 40, 13, sil);
-    for (let i = -18; i <= 18; i += 9) rect(cx + i, baseY - 15, 1, 13, '#16121f');
-    // 格子戸からぼんやり漏れる光
-    const glow = 0.5 + 0.5 * Math.sin(t * 0.9 + k);
-    if (glow > 0.75) {
-      rect(cx - 6, baseY - 12, 12, 8, 'rgba(140,190,255,0.22)');
-      lights.push({ x: cx, y: baseY - 8, r: 14 });
+  /* お堂の跡地（お堂は1983年に解体されて今はない）。
+   * 石段の上に、柱を支えていた礎石と石碑、お地蔵さまが残る小さな公園のような場所 */
+  function ruins(cx, base, th) {
+    // 礎石（お堂の柱が立っていた石）が並ぶ
+    for (let row = 0; row < 2; row++) {
+      for (let i = -3; i <= 3; i++) {
+        const x = cx + i * 8 + (row ? 4 : 0);
+        const y = base - 2 - row * 2;
+        rect(x - 2, y, 5, 2, th.stoneDark);
+        rect(x - 2, y, 5, 1, th.stone);
+      }
     }
-    ctx.fillStyle = '#1c1830';
-    for (let x = cx - 6; x <= cx + 6; x += 3) ctx.fillRect(Math.round(x), baseY - 12, 1, 8);
-    // 屋根（反りのある寄棟）
-    for (let r = 0; r < 14; r++) {
-      const hw = 30 - Math.floor(r * 1.25) - (r > 10 ? (r - 10) * 2 : 0);
-      rect(cx - hw, baseY - 16 - r, hw * 2, 1, sil);
-    }
-    rect(cx - 33, baseY - 18, 3, 1, sil); // 軒の反り
-    rect(cx + 30, baseY - 18, 3, 1, sil);
-    rect(cx - 34, baseY - 19, 2, 1, sil);
-    rect(cx + 32, baseY - 19, 2, 1, sil);
-    // 月明かりの縁取り
-    for (let r = 0; r < 14; r++) {
-      const hw = 30 - Math.floor(r * 1.25) - (r > 10 ? (r - 10) * 2 : 0);
-      rect(cx - hw, baseY - 16 - r, 1, 1, rim);
-      rect(cx + hw - 1, baseY - 16 - r, 1, 1, rim);
-    }
-    rect(cx - 8, baseY - 30, 16, 1, rim);
-    rect(cx - 1, baseY - 33, 2, 3, sil); // 宝珠
+    // 石碑（文字は読めない）
+    rect(cx - 4, base - 3, 8, 3, th.stoneDark);
+    rect(cx - 3, base - 19, 6, 16, th.stone);
+    rect(cx - 3, base - 20, 6, 1, '#7c7a82');
+    rect(cx - 1, base - 16, 2, 10, th.stoneDark);
+    // お地蔵さま
+    jizo(cx + 16, th, base);
+    jizo(cx + 24, th, base);
+    // 草むら
+    ctx.fillStyle = '#1d2a1c';
+    for (let i = 0; i < 16; i++) ctx.fillRect(Math.round(cx - 28 + i * 3.7), base - 1 - (i % 3), 2, 1 + (i % 3));
+  }
+  // 公園のベンチ
+  function bench(x, th) {
+    x = Math.round(x);
+    rect(x, GY - 7, 16, 2, '#4a3526');
+    rect(x, GY - 11, 16, 2, '#4a3526');
+    rect(x + 1, GY - 5, 1, 5, '#2a2a30');
+    rect(x + 14, GY - 5, 1, 5, '#2a2a30');
+    rect(x + 1, GY - 11, 1, 4, '#2a2a30');
+    rect(x + 14, GY - 11, 1, 4, '#2a2a30');
   }
   function doryodo(k, sx, th, t) {
     if (k % 2 === 0) {
@@ -372,7 +373,7 @@ const Scene = (() => {
         rect(cx - w / 2, GY - (i + 1) * 3, w, 1, '#7c7a82');
       }
       rect(cx - 30, GY - 21, 60, 3, th.stoneDark);
-      hall(cx, GY - 21, th, t, k);
+      ruins(cx, GY - 21, th);
       lantern(sx, th, t, k);
       lantern(sx + 88, th, t, k + 1);
     } else {
@@ -386,6 +387,7 @@ const Scene = (() => {
       rect(x - 1, GY - 25, 1, 3, '#e8e4d8');
       jizo(sx + 44, th);
       jizo(sx + 54, th);
+      bench(sx + 72, th);
     }
   }
 

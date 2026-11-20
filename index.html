@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261120-2">
+  <link rel="stylesheet" href="css/style.css?v=20261120-4">
 </head>
 <body>
   <canvas id="backdrop" aria-hidden="true"></canvas>
@@ -182,6 +182,13 @@
       <button type="button" class="btn affordable" id="modalOk">OK</button>
     </div>
   </div>
+  <div class="tab-lock hidden" id="tabLock" role="dialog" aria-modal="true" aria-labelledby="tabLockTitle">
+    <div class="modal-box">
+      <h2 id="tabLockTitle">別のタブで開かれています</h2>
+      <p>このゲームを別のタブ（またはウィンドウ）で開いたので、進行が混ざらないよう、こちらは一時停止しました。</p>
+      <button type="button" class="btn affordable" id="tabLockBtn">このタブで遊ぶ</button>
+    </div>
+  </div>
   <div class="toast" id="toast"></div>
   <div class="ach-toast" id="achToast" aria-live="polite">
     <span class="ach-badge">🏆 実績解除</span>
@@ -190,13 +197,13 @@
   </div>
 
   <!-- ?v= はキャッシュ対策。ファイルを更新したら index.html の v= の値をすべて新しくする -->
-  <script src="js/config.js?v=20261120-2"></script>
-  <script src="js/data.js?v=20261120-2"></script>
-  <script src="js/sprites.js?v=20261120-2"></script>
-  <script src="js/scene.js?v=20261120-2"></script>
-  <script src="js/sound.js?v=20261120-2"></script>
-  <script src="js/backdrop.js?v=20261120-2"></script>
-  <script src="js/game.js?v=20261120-2"></script>
-  <script src="js/extras.js?v=20261120-2"></script>
+  <script src="js/config.js?v=20261120-4"></script>
+  <script src="js/data.js?v=20261120-4"></script>
+  <script src="js/sprites.js?v=20261120-4"></script>
+  <script src="js/scene.js?v=20261120-4"></script>
+  <script src="js/sound.js?v=20261120-4"></script>
+  <script src="js/backdrop.js?v=20261120-4"></script>
+  <script src="js/game.js?v=20261120-4"></script>
+  <script src="js/extras.js?v=20261120-4"></script>
 </body>
 </html>

@@ -82,6 +82,7 @@ function load() {
   }
 }
 function save() {
+  if (tabPaused) return; // 別のタブで遊んでいる間は、このタブからは保存しない
   // 計算ミスなどで数値が壊れていたら、壊れたデータで上書きしない
   if (!Number.isFinite(S.film) || !Number.isFinite(S.total)) {
     console.error('セーブを中止しました：フィルムの値が不正です', S.film, S.total);
@@ -594,8 +595,19 @@ function buildRecords() {
     refreshUI(true);
     save();
   });
-  $('#resetBtn').addEventListener('click', () => {
-    if (!confirm('セーブデータを削除して最初からやり直します。よろしいですか？')) return;
+  $('#resetBtn').addEventListener('click', async () => {
+    const ranked = !!(RANKING_API && S.playerId && S.playerName);
+    if (
+      !confirm(
+        'セーブデータを削除して最初からやり直します。よろしいですか？' +
+          (ranked ? `\n\nランキングの記録（${S.playerName}）も削除されます。` : '')
+      )
+    )
+      return;
+    if (ranked) {
+      const ok = await deleteRankingEntry(S.playerId);
+      if (!ok && !confirm('ランキングの記録を削除できませんでした（通信エラー）。\nセーブデータだけ削除しますか？')) return;
+    }
     try {
       localStorage.removeItem(SAVE_KEY);
     } catch (e) {}
@@ -607,6 +619,8 @@ function buildRecords() {
     buildCollection();
     refreshUI(true);
     save();
+    if (typeof updateRankUI === 'function') updateRankUI(false);
+    if (typeof loadBoard === 'function') loadBoard();
   });
 
   // セーブコード
@@ -1066,6 +1080,7 @@ function update(dt) {
 let last = performance.now();
 let saveTimer = 0;
 function frame(now) {
+  if (tabPaused) return; // 別のタブで遊んでいる間は止める
   const dt = Math.min(0.25, (now - last) / 1000);
   last = now;
   update(dt);
@@ -1161,6 +1176,7 @@ function start() {
 
   // タブを閉じずに裏に回した場合も、戻ったときに経過分をまとめて計算
   document.addEventListener('visibilitychange', () => {
+    if (tabPaused) return;
     if (document.hidden) {
       hiddenAt = Date.now();
       Sound.suspend();
@@ -1179,10 +1195,86 @@ function start() {
 
   refreshUI(true);
   save();
+  started = true;
   requestAnimationFrame((t) => {
     last = t;
     requestAnimationFrame(frame);
   });
 }
 
-document.addEventListener('DOMContentLoaded', start);
+/* ---------- 複数のタブ・ウィンドウで同時に開いたとき ----------
+ * 2つのタブが別々にセーブすると、お互いの進行を上書きしたり、
+ * 放置報酬・デイリーボーナスを二重にもらえたりしてしまう。
+ * そこで「最後に開いた（または「このタブで遊ぶ」を押した）タブ」だけを動かし、
+ * ほかのタブは最新の状態を保存してから一時停止する。 */
+const TAB_ID = Math.random().toString(36).slice(2) + Date.now().toString(36);
+const TAB_KEY = 'shinrei-houchi-active-tab';
+let tabPaused = false;
+let started = false;
+let tabChannel = null;
+function tabBeat() {
+  if (tabPaused) return;
+  try {
+    localStorage.setItem(TAB_KEY, JSON.stringify({ id: TAB_ID, at: Date.now() }));
+  } catch (e) {}
+}
+function pauseForOtherTab() {
+  if (tabPaused) return;
+  save(); // 最新の状態を残してから止まる
+  tabPaused = true;
+  Sound.suspend();
+  if (typeof closeSheets === 'function') closeSheets();
+  $('#tabLock').classList.remove('hidden');
+}
+function claimTab() {
+  if (tabChannel) tabChannel.postMessage({ type: 'claim', id: TAB_ID });
+}
+function setupTabLock(onReady) {
+  if (!('BroadcastChannel' in window)) {
+    onReady();
+    return;
+  }
+  tabChannel = new BroadcastChannel('shinrei-houchi-tabs');
+  let waiting = null;
+  tabChannel.onmessage = (e) => {
+    const m = e.data || {};
+    if (m.id === TAB_ID) return;
+    if (m.type === 'claim' && started && !tabPaused) {
+      pauseForOtherTab();
+      tabChannel.postMessage({ type: 'released', id: TAB_ID });
+    } else if (m.type === 'released' && waiting) {
+      waiting();
+    }
+  };
+  $('#tabLockBtn').addEventListener('click', () => location.reload());
+  // ほかのタブが動いていそうなら、そのタブが保存して止まるのを少し待ってから始める
+  let other = null;
+  try {
+    other = JSON.parse(localStorage.getItem(TAB_KEY) || 'null');
+  } catch (e) {}
+  const go = () => {
+    waiting = null;
+    onReady();
+    tabBeat();
+    setInterval(tabBeat, 2000);
+    window.addEventListener('pagehide', () => {
+      try {
+        const cur = JSON.parse(localStorage.getItem(TAB_KEY) || 'null');
+        if (cur && cur.id === TAB_ID) localStorage.removeItem(TAB_KEY);
+      } catch (e) {}
+    });
+  };
+  if (other && Date.now() - other.at < 5000) {
+    const timer = setTimeout(go, 600);
+    waiting = () => {
+      clearTimeout(timer);
+      go();
+    };
+    claimTab();
+  } else {
+    claimTab();
+    go();
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => setupTabLock(start));

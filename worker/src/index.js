@@ -3,6 +3,7 @@
  *
  *   GET  /api/ranking?limit=50&id=<playerId>  … 上位のランキング（id を付けると自分の順位も返す）
  *   POST /api/score                           … スコアを送信（同じ id は最高記録だけ残す）
+ *   POST /api/delete                          … 自分の記録を削除（ゲームのデータ削除のとき）
  *
  * ログインなしの「名前を入力するだけ」方式なので、スコアは自己申告です。
  * 入力チェック・送信間隔の制限（id ごと・IP ごと）で、いたずらをある程度防ぎます。
@@ -29,6 +30,10 @@ export default {
       if (url.pathname === '/api/score' && request.method === 'POST') {
         if (!cors) return json({ error: 'origin_not_allowed' }, 403, null);
         return await postScore(request, env, cors);
+      }
+      if (url.pathname === '/api/delete' && request.method === 'POST') {
+        if (!cors) return json({ error: 'origin_not_allowed' }, 403, null);
+        return await deleteScore(request, env, cors);
       }
       return json({ error: 'not_found' }, 404, cors);
     } catch (e) {
@@ -149,6 +154,27 @@ async function postScore(request, env, cors) {
     .first();
   console.log(JSON.stringify({ message: 'score saved', rank: row ? row.rank : null }));
   return json({ ok: true, rank: row ? row.rank : null, best: row ? row.score : score }, 200, cors);
+}
+
+/* 自分の記録を削除する。id は各端末だけが知っている合言葉の役割（ランキングには表示しない） */
+async function deleteScore(request, env, cors) {
+  const text = await request.text();
+  if (text.length > MAX_BODY) return json({ error: 'too_large' }, 413, cors);
+  let body;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    return json({ error: 'bad_json' }, 400, cors);
+  }
+  const id = String(body.id || '');
+  if (!ID_RE.test(id)) return json({ error: 'bad_id' }, 400, cors);
+  const res = await env.DB.batch([
+    env.DB.prepare('DELETE FROM scores WHERE id = ?').bind(id),
+    env.DB.prepare('DELETE FROM rate WHERE key = ?').bind('id:' + id),
+  ]);
+  const deleted = res[0] && res[0].meta ? res[0].meta.changes : 0;
+  console.log(JSON.stringify({ message: 'score deleted', deleted }));
+  return json({ ok: true, deleted }, 200, cors);
 }
 
 function cleanName(v) {
