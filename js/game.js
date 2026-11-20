@@ -11,7 +11,16 @@ function defaultState() {
   return {
     film: 0,
     total: 0,
-    lv: { flash: 0, camera: 0, moped: 0, amulet: 0 },
+    lv: { flash: 0, camera: 0, moped: 0, amulet: 0, ofuda: 0, ir: 0, sensor: 0 },
+    runTotal: 0, // 今回（転生してから）の獲得フィルム
+    reikan: 0, // 霊感（転生で得る永久ボーナス）
+    rebirths: 0, // 転生回数
+    comp: { cat: 0, kohai: 0, vet: 0 }, // 仲間のなかよし度（0 = まだ仲間ではない）
+    daily: { last: '', streak: 0, best: 0 }, // デイリーボーナス
+    vol: { sfx: 0.7, amb: 0.7 }, // 音量
+    playerId: '', // ランキング用のID（端末ごと）
+    playerName: '', // ランキングに出す名前
+    ranked: false,
     unlocked: 1,
     stage: 0,
     clicks: 0,
@@ -31,21 +40,33 @@ let S = defaultState();
 
 // 読み込んだデータを安全な形にそろえる（localStorage・セーブコード共通）
 function normalize(d) {
-  if (!d || typeof d !== 'object' || typeof d.film !== 'number' || !d.lv) throw new Error('invalid');
+  if (!d || typeof d !== 'object' || !d.lv) throw new Error('invalid');
+  // ※ base は入れ子の初期値（lv・comp など）を取り出すためだけに使う。
+  //   Object.assign(base, d) だと base.lv が d.lv に置き換わり、新しく増えた項目の初期値が入らないため
   const base = defaultState();
-  const s = Object.assign(base, d);
+  const s = Object.assign(defaultState(), d);
   s.lv = Object.assign(base.lv, d.lv);
   for (const k in s.lv) s.lv[k] = Math.max(0, s.lv[k] | 0);
   s.photos = d.photos && typeof d.photos === 'object' ? d.photos : {};
   s.ach = d.ach && typeof d.ach === 'object' ? d.ach : {};
   s.steps = Object.assign(base.steps, d.steps || {});
   s.maxAway = +d.maxAway || 0;
+  s.comp = Object.assign(base.comp, d.comp || {});
+  for (const k in s.comp) s.comp[k] = Math.max(0, s.comp[k] | 0);
+  s.daily = Object.assign(base.daily, d.daily || {});
+  s.vol = Object.assign(base.vol, d.vol || {});
+  // 転生機能より前のセーブは、これまでの総獲得を「今回の獲得」とみなす
+  s.runTotal = d.runTotal == null ? +d.total || 0 : Math.max(0, +d.runTotal || 0);
+  s.reikan = Math.max(0, +d.reikan || 0);
+  s.rebirths = Math.max(0, d.rebirths | 0);
+  s.playerName = String(d.playerName || '').slice(0, 12);
   if (!BUY_MODES.some((m) => m.id === s.buyMode)) s.buyMode = 'x1';
   s.achInit = !!d.achInit;
   s.unlocked = Math.min(Math.max(1, s.unlocked | 0), STAGES.length);
   s.stage = Math.min(Math.max(0, s.stage | 0), s.unlocked - 1);
-  if (!isFinite(s.film) || s.film < 0) s.film = 0;
-  if (!isFinite(s.total)) s.total = s.film;
+  if (!Number.isFinite(s.film) || s.film < 0) s.film = 0;
+  if (!Number.isFinite(s.total) || s.total < s.film) s.total = s.film;
+  if (!Number.isFinite(s.runTotal)) s.runTotal = s.total;
   return s;
 }
 
@@ -61,6 +82,11 @@ function load() {
   }
 }
 function save() {
+  // 計算ミスなどで数値が壊れていたら、壊れたデータで上書きしない
+  if (!Number.isFinite(S.film) || !Number.isFinite(S.total)) {
+    console.error('セーブを中止しました：フィルムの値が不正です', S.film, S.total);
+    return;
+  }
   S.lastSave = Date.now();
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(S));
@@ -114,9 +140,24 @@ const milestone = (lv) => Math.pow(2, Math.floor(lv / 10)); // 10レベルごと
 const flashMult = (lv = S.lv.flash) => (1 + 0.5 * lv) * milestone(lv);
 const cameraMult = (lv = S.lv.camera) => (1 + lv) * milestone(lv);
 const exploreDur = (lv = S.lv.moped) => Math.max(0.5, 4 / (1 + 0.25 * lv));
-const exploreReward = () => 3 * STAGES[S.stage].mult * flashMult();
+// すべての収入にかかる倍率（霊感＋赤外線カメラ）
+const reikanMult = (pts = S.reikan) => 1 + REBIRTH.bonusPerPoint * pts;
+const irMult = (lv = S.lv.ir) => 1 + 0.25 * lv;
+const globalMult = () => reikanMult() * irMult();
+// 仲間の効果（なかよし度 lv。0 = いない）
+const kohaiMult = (lv = S.comp.kohai) => (lv > 0 ? 1.5 + 0.15 * (lv - 1) : 1); // 撮影
+const vetMult = (lv = S.comp.vet) => (lv > 0 ? 1.4 + 0.12 * (lv - 1) : 1); // 探索
+const catInterval = (lv = S.comp.cat) => 32 / (1 + 0.05 * (lv - 1)); // 黒猫がフィルムを拾ってくる間隔（秒）
+const catAmountSec = (lv = S.comp.cat) => 12 + 3 * (lv - 1); // 何秒分の探索収入を拾ってくるか
+// 上位装備
+const ofudaMult = (lv = S.lv.ofuda) => 1 + 0.5 * lv; // 心霊写真ボーナス
+const ghostIntervalMult = (lv = S.lv.ofuda) => Math.max(0.55, 1 - 0.03 * lv); // 幽霊の出現間隔
+const rareChance = (lv = S.lv.sensor) => 0.25 + 0.03 * lv;
+const stepWinRate = (lv = S.lv.sensor) => 0.55 + 0.02 * lv;
+
+const exploreReward = () => 3 * STAGES[S.stage].mult * flashMult() * vetMult() * globalMult();
 const ratePerSec = () => exploreReward() / exploreDur();
-const clickReward = () => STAGES[S.stage].mult * cameraMult();
+const clickReward = () => STAGES[S.stage].mult * cameraMult() * kohaiMult() * globalMult();
 const offlineCapHours = (lv = S.lv.amulet) => 8 + 2 * lv;
 
 function upgradeCost(u) {
@@ -127,6 +168,8 @@ function isMax(u) {
 }
 
 function gain(n) {
+  if (!Number.isFinite(n) || n <= 0) return;
+  S.runTotal += n;
   S.film += n;
   S.total += n;
 }
@@ -246,7 +289,12 @@ function toast(msg) {
 }
 
 /* ---------- モーダル ---------- */
+const modalQueue = [];
 function showModal(title, html, btn = 'OK') {
+  if (!$('#modal').classList.contains('hidden')) {
+    modalQueue.push([title, html, btn]);
+    return;
+  }
   $('#modalTitle').textContent = title;
   $('#modalBody').innerHTML = html;
   $('#modalOk').textContent = btn;
@@ -254,6 +302,8 @@ function showModal(title, html, btn = 'OK') {
 }
 function hideModal() {
   $('#modal').classList.add('hidden');
+  const next = modalQueue.shift();
+  if (next) showModal(...next);
 }
 
 /* ---------- 放置報酬 ---------- */
@@ -305,7 +355,7 @@ function catchGhost(g) {
   const def = GHOSTS.find((d) => d.id === g.type) || GHOSTS[0];
   g.caught = true;
   g.caughtT = 0;
-  const bonus = Math.max(clickReward() * 15, ratePerSec() * 45) * (def.rare ? 3 : 1);
+  const bonus = Math.max(clickReward() * 15, ratePerSec() * 45) * (def.rare ? 3 : 1) * ofudaMult();
   gain(bonus);
   S.ghosts++;
   const isNew = !S.photos[def.id];
@@ -329,7 +379,7 @@ function pickGhostType() {
   const pool = GHOSTS.filter((d) => d.stage === S.stage);
   const rare = pool.filter((d) => d.rare);
   const common = pool.filter((d) => !d.rare);
-  const list = rare.length && Math.random() < 0.25 ? rare : common.length ? common : pool;
+  const list = rare.length && Math.random() < rareChance() ? rare : common.length ? common : pool;
   return list[Math.floor(Math.random() * list.length)].id;
 }
 
@@ -347,6 +397,7 @@ const costAt = (u, lv) => Math.ceil(u.base * Math.pow(u.growth, lv));
  *  max      : 所持フィルムで買える最大数（1つも買えないときは1つ分の価格を表示）
  */
 function buyPlan(u, mode = S.buyMode) {
+  if (u.req && S.unlocked < u.req) return { n: 0, cost: 0, ok: false, maxed: false, locked: true };
   const lv0 = S.lv[u.id];
   const room = u.max != null ? u.max - lv0 : Infinity;
   if (room <= 0) return { n: 0, cost: 0, ok: false, maxed: true };
@@ -447,6 +498,9 @@ function buildUpgrades() {
     box.appendChild(el);
     upgEls[u.id] = {
       el,
+      name: el.querySelector('.upg-name'),
+      desc: el.querySelector('.upg-desc'),
+      icon: el.querySelector('.icon'),
       lv: el.querySelector('.upg-lv b'),
       to: el.querySelector('.upg-lv i'),
       eff: el.querySelector('.upg-eff'),
@@ -471,6 +525,12 @@ function upgradeEffect(u, n = 1) {
       return `探索 ${exploreDur(lv).toFixed(2)}秒` + (max ? '' : ` → ${exploreDur(to).toFixed(2)}秒`);
     case 'amulet':
       return `放置上限 ${offlineCapHours(lv)}時間` + (max ? '' : ` → ${offlineCapHours(to)}時間`);
+    case 'ofuda':
+      return `心霊写真 ×${fmt(ofudaMult(lv))}` + (max ? '' : ` → ×${fmt(ofudaMult(to))}`) + `・出現間隔 ${Math.round(ghostIntervalMult(max ? lv : to) * 100)}%`;
+    case 'ir':
+      return `全収入 ×${fmt(irMult(lv))}` + (max ? '' : ` → ×${fmt(irMult(to))}`);
+    case 'sensor':
+      return `レア ${Math.round(rareChance(max ? lv : to) * 100)}%・足音成功 ${Math.round(stepWinRate(max ? lv : to) * 100)}%`;
   }
   return '';
 }
@@ -529,7 +589,8 @@ function buildSpots() {
 function buildRecords() {
   $('#soundBtn').addEventListener('click', () => {
     S.muted = !S.muted;
-    Sound.setMuted(S.muted);
+    Sound.setVolumes(S.vol.sfx, S.vol.amb);
+  Sound.setMuted(S.muted);
     refreshUI(true);
     save();
   });
@@ -627,6 +688,23 @@ function refreshUI(force) {
   UPGRADES.forEach((u) => {
     const e = upgEls[u.id];
     const p = buyPlan(u);
+    e.el.classList.toggle('locked', !!p.locked);
+    if (p.locked) {
+      e.name.textContent = '？？？';
+      e.desc.textContent = `「${STAGES[u.req - 1].name}」を解放すると手に入る上位装備。`;
+      e.icon.style.filter = 'brightness(0) opacity(0.5)';
+      e.lv.textContent = '-';
+      e.to.textContent = '';
+      e.eff.textContent = '';
+      e.n.textContent = '';
+      e.cost.textContent = '🔒';
+      e.el.disabled = true;
+      e.el.classList.remove('affordable');
+      return;
+    }
+    e.name.textContent = u.name;
+    e.desc.textContent = u.desc;
+    e.icon.style.filter = '';
     e.lv.textContent = S.lv[u.id];
     e.to.textContent = p.maxed ? '（最大）' : ` → Lv${S.lv[u.id] + p.n}`;
     e.eff.textContent = upgradeEffect(u, p.n);
@@ -651,7 +729,7 @@ function refreshUI(force) {
     $('#stExplores').textContent = S.explores.toLocaleString('ja-JP');
     $('#stCap').textContent = offlineCapHours() + '時間';
     $('#stStart').textContent = new Date(S.created).toLocaleDateString('ja-JP');
-    $('#soundBtn').textContent = S.muted ? '効果音：OFF' : '効果音：ON';
+    $('#soundBtn').textContent = S.muted ? '音：OFF' : '音：ON';
   }
 }
 
@@ -790,7 +868,6 @@ function finishPrayer() {
 
 /* ---------- 足音イベント ---------- */
 const STEP_LIMIT = 10; // 選ばないまま過ぎると何も起きない
-const STEP_WIN_RATE = 0.55;
 function sfxSteps() {
   Sound.steps();
 }
@@ -817,7 +894,7 @@ function endStep(choice) {
   } else if (choice === 'run') {
     S.steps.run++;
     log('ゆらは足音から逃げ出した。……何も起きなかった。');
-  } else if (Math.random() < STEP_WIN_RATE) {
+  } else if (Math.random() < stepWinRate()) {
     const bonus = Math.max(ratePerSec() * 120, clickReward() * 40);
     gain(bonus);
     S.steps.win++;
@@ -948,7 +1025,7 @@ function update(dt) {
   } else if (!V.calm) {
     V.ghostTimer -= dt;
     if (V.ghostTimer <= 0) {
-      V.ghostTimer = 30 + Math.random() * 35;
+      V.ghostTimer = (30 + Math.random() * 35) * ghostIntervalMult();
       V.ghost = { type: pickGhostType(), x: 104 + Math.random() * 64, y: 20 + Math.random() * 34, age: 0, life: 7, caught: false, caughtT: 0 };
       log('……何かいる。今だ、撮影して！', 'ghost');
       Sound.ghostAppear();
@@ -975,6 +1052,7 @@ function update(dt) {
 
   // 環境音（風・水滴・滝）
   Sound.ambientUpdate(dt, V.t, !!STAGES[S.stage].theme.interior, V.fallsVol);
+  updateCompanions(dt);
 
   V.flash = Math.max(0, V.flash - dt * 4);
   V.miniFlash = Math.max(0, V.miniFlash - dt * 3);
@@ -1005,6 +1083,10 @@ function frame(now) {
     yuraDy: V.yuraDy,
     yuraTilt: V.tilt,
     calm: V.calm,
+    gait: V.gait,
+    walkW: V.walkW,
+    catHop: V.catHop,
+    comps: { cat: S.comp.cat > 0, kohai: S.comp.kohai > 0, vet: S.comp.vet > 0 },
     lightR: lightRadius(),
   });
   uiTimer += dt;
@@ -1035,6 +1117,10 @@ function start() {
   buildRecords();
   buildCollection();
   buildAchievements();
+  buildCompanions();
+  buildRebirth();
+  setupVolume();
+  setupRanking();
   setupStepEvent();
   setupTabs();
   // 実績機能より前のセーブは、達成済みの実績を通知なしで記録する
@@ -1054,9 +1140,11 @@ function start() {
     log(`ゆらは「${STAGES[S.stage].name}」の探索を再開した。`);
     const away = (Date.now() - S.lastSave) / 1000;
     if (away > 30) grantOffline(away, true);
+    checkDaily();
   } else {
     log('ゆらの心霊スポット巡りが始まった…');
     log('画面をタップすると撮影できるよ！', 'gold');
+    checkDaily();
   }
 
   // タブを閉じずに裏に回した場合も、戻ったときに経過分をまとめて計算
@@ -1071,6 +1159,7 @@ function start() {
       Sound.resume();
       last = performance.now();
       grantOffline(away, false);
+      checkDaily(); // 日付が変わっていたらデイリーボーナス
     }
   });
   window.addEventListener('pagehide', save);

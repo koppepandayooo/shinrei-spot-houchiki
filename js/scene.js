@@ -1036,6 +1036,34 @@ const Scene = (() => {
     };
   }
 
+  /* ---------- 仲間（ゆらのまわりに小さく表示） ---------- */
+  // x は低解像度での中心位置（ゆらからの距離）、ph は歩調のずれ
+  const COMP_POS = { kohai: { x: -25, ph: 1.2 }, vet: { x: 25, ph: 2.1 }, cat: { x: -12, ph: 0.6 } };
+  function drawComp(id, v) {
+    const pos = COMP_POS[id];
+    const walkW = v.walkW || 0;
+    const gait = (v.gait || 0) + pos.ph;
+    const frame = id === 'cat' && walkW > 0.3 ? (Math.floor(gait / Math.PI) & 1) : 0;
+    const img = Sprites.comp(id, frame);
+    let dy = -Math.abs(Math.cos(gait)) * (id === 'cat' ? 3 : 2) * walkW;
+    dy += Math.sin((v.t || 0) * 2 + pos.ph) * 1 * (1 - walkW);
+    if (id === 'cat' && v.catHop > 0) dy -= Math.sin((1 - v.catHop / 0.5) * Math.PI) * 9;
+    const w = img.width * SCALE;
+    const h = img.height * SCALE;
+    const cx = (YURA_CX + pos.x) * SCALE;
+    mctx.fillStyle = 'rgba(0,0,0,0.3)';
+    mctx.fillRect(Math.round(cx - w * 0.35), GY * SCALE + 1, Math.round(w * 0.7), 3);
+    mctx.drawImage(img, Math.round(cx - w / 2), Math.round(GY * SCALE + 3 - h + dy), w, h);
+    if (id === 'vet') lights.push({ x: YURA_CX + pos.x + 6, y: GY - 11, r: 14 }); // ゲンさんのランタン
+  }
+  function drawCompanions(v, front) {
+    const c = v.comps || {};
+    if (!front) {
+      if (c.kohai) drawComp('kohai', v);
+      if (c.vet) drawComp('vet', v);
+    } else if (c.cat) drawComp('cat', v);
+  }
+
   /* ---------- メイン描画 ---------- */
   function render(v) {
     const stage = STAGES[v.stage];
@@ -1053,8 +1081,10 @@ const Scene = (() => {
     fog(th, t);
     mctx.drawImage(bg, 0, 0, MW, MH);
 
-    // ゆら（高解像度）
+    // 仲間とゆら（高解像度）
+    drawCompanions(v, false);
     drawYura(v);
+    drawCompanions(v, true);
 
     // 暗闇・演出（低解像度）
     ctx = fx.getContext('2d');

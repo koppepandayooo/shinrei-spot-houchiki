@@ -598,9 +598,139 @@ const ICONS = {
     '..........',
   ],
 };
+ICONS.ofuda = [
+  '...oooo...',
+  '...owwo...',
+  '...orro...',
+  '...owwo...',
+  '...orwo...',
+  '...owro...',
+  '...orro...',
+  '...owwo...',
+  '...owwo...',
+  '...oooo...',
+];
+ICONS.ir = [
+  '..........',
+  '.ooo...g..',
+  'oooooooooo',
+  'occcrrccco',
+  'occrRrrcco',
+  'occrrrrcco',
+  'occcrrccco',
+  'oooooooooo',
+  '..........',
+  '..........',
+];
+ICONS.sensor = [
+  '....o.....',
+  '...oo.....',
+  '..oooooo..',
+  '..ogyyro..',
+  '..occcco..',
+  '..ocWWco..',
+  '..occcco..',
+  '..occcco..',
+  '..oooooo..',
+  '..........',
+];
+
+/* ---------- 仲間（低解像度の文字マップ。シーンでは3倍で描く） ---------- */
+const COMP_SPRITES = {
+  cat: {
+    pal: { o: '#141018', h: '#3a3450', y: '#ffd84a' },
+    frames: [
+      [
+        '.........o.o',
+        '........hooo',
+        '........oyoy',
+        'o.......oooo',
+        'oo..hhhhooo.',
+        '.ooooooooo..',
+        '..oooooooo..',
+        '..o.o..o.o..',
+      ],
+      [
+        '.........o.o',
+        '........hooo',
+        '........oyoy',
+        '.o......oooo',
+        'oo..hhhhooo.',
+        '.ooooooooo..',
+        '..oooooooo..',
+        '...o.o..o.o.',
+      ],
+    ],
+  },
+  kohai: {
+    pal: {
+      k: '#1c1824', s: '#f2d2bc', g: '#8ad0ff', m: '#c0485a', p: '#5a3a8a',
+      b: '#d8c8a0', q: '#2a2a3c', w: '#e8e8e8', e: '#3a2a20',
+    },
+    frames: [
+      [
+        '...kkkkkk...',
+        '..kkkkkkkk..',
+        '.kkkkkkkkkk.',
+        '.kkkssssskk.',
+        '.kkgggsgggk.',
+        '.kksssssssk.',
+        '..kssmsssk..',
+        '...kssssk...',
+        '....pppp....',
+        '..pppppppp..',
+        '.ppppbbpppp.',
+        '.ppsbbbbspp.',
+        '.pppbbbbppp.',
+        '..pppppppp..',
+        '..qqqqqqqq..',
+        '..qqqqqqqq..',
+        '...ss..ss...',
+        '...ss..ss...',
+        '...ww..ww...',
+        '...ww..ww...',
+        '..eee..eee..',
+        '............',
+      ],
+    ],
+  },
+  vet: {
+    pal: {
+      h: '#6a5030', H: '#3a2a18', s: '#e0b08c', o: '#1a1418', g: '#b8b8c0', v: '#8a7a4a',
+      w: '#c8c0a8', B: '#4a5a3a', Y: '#ffd27a', n: '#3a3a44', t: '#3a2416',
+    },
+    frames: [
+      [
+        '....hhhhhh....',
+        '....HHHHHH....',
+        '.hhhhhhhhhhhh.',
+        '...ssssssss...',
+        '...soossoos...',
+        '...ssssssss...',
+        '...gggggggg...',
+        '....gggggg....',
+        '..vvvvvvvvvv..',
+        '.Bvvvwwwwvvvs.',
+        '.Bvvvwwwwvvsoo',
+        '.BvvvwwwwvvvYY',
+        '.Bvvvvvvvvvvoo',
+        '..vvvvvvvvvv..',
+        '..nnnnnnnnnn..',
+        '..nnnnnnnnnn..',
+        '..nnnn..nnnn..',
+        '..nnnn..nnnn..',
+        '..nnnn..nnnn..',
+        '..nnn....nnn..',
+        '.ttttt..ttttt.',
+        '..............',
+      ],
+    ],
+  },
+};
+
 const ICON_PAL = {
   o: '#9a93bd', c: '#3a3848', y: '#ffe066', W: '#ffffff', f: '#c9c9d1', F: '#fff3a8',
-  r: '#d0384e', l: '#7fb2e0',
+  r: '#d0384e', l: '#7fb2e0', w: '#efe8d6', R: '#ff8090', g: '#46c06a',
 };
 
 const Sprites = (() => {
@@ -683,5 +813,24 @@ const Sprites = (() => {
     return iconUrlCache[name];
   }
 
-  return { yura, yuraImage, loadYuraImage, ghost, ghostURL, iconURL };
+  const compCache = {};
+  function comp(id, frame = 0) {
+    const key = id + ':' + frame;
+    if (!compCache[key]) {
+      const c = COMP_SPRITES[id];
+      compCache[key] = rowsToCanvas(c.frames[frame % c.frames.length], c.pal);
+    }
+    return compCache[key];
+  }
+  const compUrlCache = {};
+  function compURL(id, silhouette) {
+    const key = id + (silhouette ? ':s' : '');
+    if (!compUrlCache[key]) {
+      const c = COMP_SPRITES[id];
+      compUrlCache[key] = rowsToCanvas(c.frames[0], c.pal, silhouette ? '#3a3356' : null).toDataURL();
+    }
+    return compUrlCache[key];
+  }
+
+  return { yura, yuraImage, loadYuraImage, ghost, ghostURL, iconURL, comp, compURL };
 })();

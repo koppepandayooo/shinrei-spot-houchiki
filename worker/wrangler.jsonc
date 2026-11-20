@@ -1,0 +1,23 @@
+{
+  // ランキング API（Cloudflare Workers）。手順は worker/README.md を参照
+  "name": "shinrei-ranking",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-20",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "logs": { "head_sampling_rate": 1 }
+  },
+  "vars": {
+    // スコアの送信を受け付けるサイト（カンマ区切り）
+    "ALLOWED_ORIGINS": "https://koppepandayooo.github.io,http://localhost:8765"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "shinrei-ranking",
+      // `npx wrangler d1 create shinrei-ranking` で作ったデータベース
+      "database_id": "4bce4a91-dd30-4b66-badd-42bcca0036ff"
+    }
+  ]
+}

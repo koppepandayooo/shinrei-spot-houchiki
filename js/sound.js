@@ -11,6 +11,8 @@ const Sound = (() => {
   let ctx = null;
   let master, sfxBus, ambBus, echoIn, noiseBuf;
   let muted = false;
+  let volSfx = 0.7; // 効果音の音量（0..1）
+  let volAmb = 0.7; // 環境音の音量（0..1）
   let amb = null;
 
   function ensure() {
@@ -27,7 +29,7 @@ const Sound = (() => {
         comp.ratio.value = 4;
         comp.connect(master);
         sfxBus = ctx.createGain();
-        sfxBus.gain.value = 0.9;
+        sfxBus.gain.value = 1.2 * volSfx;
         sfxBus.connect(comp);
         ambBus = ctx.createGain();
         ambBus.gain.value = 0;
@@ -213,7 +215,7 @@ const Sound = (() => {
     const wind = loopNoise('lowpass', 400, 0.7);
     const falls = loopNoise('bandpass', 700, 0.6);
     amb = { wind, falls, nextDrip: 1.5 };
-    ambBus.gain.setTargetAtTime(1, now(), 1.2);
+    ambBus.gain.setTargetAtTime(1.4 * volAmb, now(), 1.2);
   }
   function drip(interior) {
     const f = 1300 + Math.random() * 1100;
@@ -240,9 +242,17 @@ const Sound = (() => {
     if (muted) ambBus.gain.setTargetAtTime(0, now(), 0.15);
     else {
       ensure();
-      if (amb) ambBus.gain.setTargetAtTime(1, now(), 0.8);
+      if (amb) ambBus.gain.setTargetAtTime(1.4 * volAmb, now(), 0.8);
       else ambientStart();
     }
+  }
+  // 音量（0..1）。効果音と環境音を別々に
+  function setVolumes(sfx, ambient) {
+    volSfx = Math.max(0, Math.min(1, sfx));
+    volAmb = Math.max(0, Math.min(1, ambient));
+    if (!ctx) return;
+    sfxBus.gain.setTargetAtTime(1.2 * volSfx, now(), 0.05);
+    if (amb && !muted) ambBus.gain.setTargetAtTime(1.4 * volAmb, now(), 0.1);
   }
   function suspend() {
     if (ctx && ctx.state === 'running') ctx.suspend();
@@ -253,6 +263,6 @@ const Sound = (() => {
 
   return {
     shutter, buy, unlock, achievement, sweep, ghostAppear, ghostCatch, steps, chime,
-    ambientStart, ambientUpdate, setMuted, suspend, resume,
+    ambientStart, ambientUpdate, setMuted, setVolumes, suspend, resume,
   };
 })();

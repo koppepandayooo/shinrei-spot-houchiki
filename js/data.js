@@ -155,23 +155,69 @@ const UPGRADES = [
   {
     id: 'flash', name: '懐中電灯', icon: 'flash',
     desc: '闇の奥まで照らせるようになり、探索で見つかるフィルムが増える。',
-    base: 15, growth: 1.17,
+    base: 15, growth: 1.22,
   },
   {
     id: 'camera', name: 'カメラ', icon: 'camera',
     desc: '性能アップで、タップ撮影でもらえるフィルムが増える。',
-    base: 10, growth: 1.16,
+    base: 10, growth: 1.21,
   },
   {
     id: 'moped', name: '原付', icon: 'moped',
     desc: 'スポットへの移動が速くなり、探索スピードが上がる。',
-    base: 60, growth: 1.32, max: 40,
+    base: 60, growth: 1.38, max: 40,
   },
   {
     id: 'amulet', name: 'お守り', icon: 'amulet',
     desc: '無事に帰ってこられる時間がのび、放置で貯まる上限時間が増える。',
-    base: 300, growth: 2.5, max: 8,
+    base: 300, growth: 3, max: 8,
   },
+  /* ② 上位装備（スポットを解放すると買えるようになる。req = 必要な解放スポット数） */
+  {
+    id: 'ofuda', name: 'お札', icon: 'ofuda', req: 2,
+    desc: '霊の気配を引き寄せる。心霊写真のボーナスが増え、幽霊が少し現れやすくなる。',
+    base: 3000, growth: 1.45, max: 15,
+  },
+  {
+    id: 'ir', name: '赤外線カメラ', icon: 'ir', req: 3,
+    desc: '闇の中でも写せる上位カメラ。探索・撮影すべての収入が増える。',
+    base: 60000, growth: 1.5,
+  },
+  {
+    id: 'sensor', name: '霊感センサー', icon: 'sensor', req: 4,
+    desc: '微かな霊の反応を拾う上位装備。★レアの幽霊が出やすくなり、足音イベントの撮影成功率も上がる。',
+    base: 3e6, growth: 1.8, max: 10,
+  },
+];
+
+/* ③ 転生（お祓いを受けて出直す）
+ *  装備・フィルム・解放スポットをリセットするかわりに「霊感」ポイントを得る。
+ *  霊感1につき、すべての収入が +10%（ずっと残る） */
+const REBIRTH = {
+  minSpots: 3, // 八王子城跡まで解放していること
+  divisor: 1e5, // 獲得霊感 = floor(√(今回の獲得フィルム ÷ divisor))
+  bonusPerPoint: 0.1,
+};
+
+/* 仲間（フィルムで仲間にして、なかよし度を上げると効果アップ） */
+const COMPANIONS = [
+  {
+    id: 'cat', name: 'お供の黒猫「クロ」', req: 1, join: 500, base: 2000, growth: 1.6, max: 20,
+    desc: 'ゆらの足もとをついて歩く黒猫。ときどき、どこかからフィルムをくわえて戻ってくる。',
+  },
+  {
+    id: 'kohai', name: 'オカルト好きの後輩「ミオ」', req: 2, join: 20000, base: 40000, growth: 1.6, max: 20,
+    desc: '心霊スポット巡りについてきたオカルト好きの後輩。撮影のコツを教えてくれる。',
+  },
+  {
+    id: 'vet', name: 'ベテラン探検家「ゲンさん」', req: 3, join: 500000, base: 1e6, growth: 1.6, max: 20,
+    desc: '山と廃道を知り尽くしたベテラン探検家。効率のよい探索ルートを案内してくれる。',
+  },
+];
+
+/* デイリーボーナス（連続日数。7日目は大きめ＋霊感+1。8日目からまた1日目） */
+const DAILY = [
+  { min: 5 }, { min: 8 }, { min: 12 }, { min: 18 }, { min: 25 }, { min: 35 }, { min: 90, reikan: 1 },
 ];
 
 const COMMON_LINES = [
@@ -231,4 +277,11 @@ const ACHIEVEMENTS = [
   { id: 'moped10', name: '峠の走り屋', desc: '原付をLv10にする', check: (s) => s.lv.moped >= 10 },
   { id: 'amuletMax', name: 'お守りフル装備', desc: 'お守りを最大レベルにする', check: (s) => s.lv.amulet >= 8 },
   { id: 'away1h', name: 'のんびり放置', desc: '1時間以上放置してから戻ってくる', check: (s) => s.maxAway >= 3600 },
+  { id: 'rebirth1', name: 'お祓いを受けて出直す', desc: '初めて転生する', check: (s) => s.rebirths >= 1 },
+  { id: 'reikan10', name: '霊感が強い', desc: '霊感を10以上ためる', check: (s) => s.reikan >= 10 },
+  { id: 'comp1', name: 'ひとりじゃない', desc: '仲間を1人（1匹）むかえる', check: (s) => Object.values(s.comp).some((v) => v >= 1) },
+  { id: 'comp3', name: '心霊スポット探検隊', desc: '仲間を3人そろえる', check: (s) => Object.values(s.comp).filter((v) => v >= 1).length >= 3 },
+  { id: 'daily7', name: '七日目の夜', desc: '7日連続でデイリーボーナスをもらう', check: (s) => s.daily.best >= 7 },
+  { id: 'ranked', name: 'ランキング初登録', desc: '名前を登録してスコアを送信する', check: (s) => !!s.ranked },
+  { id: 'ir1', name: '闇を見通す目', desc: '赤外線カメラを手に入れる', check: (s) => s.lv.ir >= 1 },
 ];

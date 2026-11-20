@@ -7,3 +7,8 @@ tools/
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# ランキング Worker のローカル作業ファイル
+worker/node_modules/
+worker/.wrangler/
+worker/.dev.vars
