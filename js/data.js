@@ -206,11 +206,11 @@ const COMPANIONS = [
     desc: 'ゆらの足もとをついて歩く黒猫。ときどき、どこかからフィルムをくわえて戻ってくる。',
   },
   {
-    id: 'kohai', name: 'オカルト好きの後輩「ミオ」', req: 2, join: 20000, base: 40000, growth: 1.6, max: 20,
+    id: 'kohai', name: 'オカルト好きの後輩「ミオ」', req: 2, join: 50000, base: 120000, growth: 1.6, max: 20,
     desc: '心霊スポット巡りについてきたオカルト好きの後輩。撮影のコツを教えてくれる。',
   },
   {
-    id: 'vet', name: 'ベテラン探検家「ゲンさん」', req: 3, join: 500000, base: 1e6, growth: 1.6, max: 20,
+    id: 'vet', name: 'ベテラン探検家「ゲンさん」', req: 3, join: 2e6, base: 6e6, growth: 1.6, max: 20,
     desc: '山と廃道を知り尽くしたベテラン探検家。効率のよい探索ルートを案内してくれる。',
   },
 ];

@@ -1107,6 +1107,7 @@ let hiddenAt = null;
 function start() {
   const had = load();
   Sprites.loadYuraImage('img/yura_pixel.png');
+  Sprites.loadCompImages({ cat: 'img/comp_cat.png', kohai: 'img/comp_kohai.png', vet: 'img/comp_vet.png' });
   Sound.setMuted(S.muted);
   // ブラウザの決まりで、音は最初の操作のあとから鳴らせる
   document.addEventListener('pointerdown', () => Sound.ambientStart(), { passive: true });

@@ -64,7 +64,13 @@ function refreshCompanions() {
     const locked = S.unlocked < c.req;
     e.el.classList.toggle('locked', locked);
     e.el.classList.toggle('joined', lv > 0);
-    e.img.src = Sprites.compURL(c.id, locked);
+    const pic = Sprites.compImage(c.id);
+    const src = pic ? pic.src : Sprites.compURL(c.id, locked);
+    if (e.img.getAttribute('src') !== src) e.img.src = src;
+    e.img.style.width = pic ? pic.width * (c.id === 'cat' ? 2 : 1) * 0.75 + 'px' : '';
+    e.img.style.filter = locked && pic ? 'brightness(0) opacity(0.55)' : '';
+    // 画面と同じく、進む向き（右）を向かせる
+    e.img.style.transform = pic && (c.id === 'cat' || c.id === 'vet') ? 'scaleX(-1)' : '';
     e.name.textContent = locked ? '？？？' : c.name;
     e.desc.textContent = locked ? `「${STAGES[c.req - 1].name}」で出会えるかもしれない…` : c.desc;
     e.eff.textContent = locked ? '' : compEffect(c);

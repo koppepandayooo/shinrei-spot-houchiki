@@ -52,6 +52,7 @@ HTML / CSS / JavaScript だけで動きます。ビルドは不要です。
 │   └── game.js     … ゲームの状態、計算式、セーブ、実績、足音イベント、UI、メインループ
 ├── img/
 │   ├── yura_pixel.png … ゆらのドット絵（yura.png から自動生成）
+│   ├── comp_cat.png / comp_kohai.png / comp_vet.png … 仲間のドット絵（元イラストから自動生成）
 │   ├── favicon-32.png / favicon-16.png … タブのアイコン
 │   └── apple-touch-icon.png … iPhone/iPad のホーム画面アイコン
 ├── tools/          … ※手元のみ（このリポジトリには含めていません）
@@ -76,6 +77,14 @@ python tools/pixelize.py
 
 縦のサイズや色数は `--height 96 --colors 32` のように変えられます。
 アイコンも作り直すときは、続けて `python tools/make_icons.py` を実行してください。
+
+仲間のドット絵は次のコマンドで作り直せます（元イラストは手元のみ）。
+
+```bash
+python tools/pixelize.py --src koppecat.jpg --out img/comp_cat.png --height 38 --colors 16 --outline "#5a5280"
+python tools/pixelize.py --src kouhai2.png --out img/comp_kohai.png --height 86 --colors 32
+python tools/pixelize.py --src veteran.png --out img/comp_vet.png --height 92 --colors 32
+```
 （フォントだけ Google Fonts の「DotGothic16」を読み込んでいます。オフラインでも等幅フォントで動きます）
 
 ## ローカルで遊ぶ

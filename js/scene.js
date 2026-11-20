@@ -1038,23 +1038,40 @@ const Scene = (() => {
 
   /* ---------- 仲間（ゆらのまわりに小さく表示） ---------- */
   // x は低解像度での中心位置（ゆらからの距離）、ph は歩調のずれ
-  const COMP_POS = { kohai: { x: -25, ph: 1.2 }, vet: { x: 25, ph: 2.1 }, cat: { x: -12, ph: 0.6 } };
+  // flip: 元のイラストが左向きなので、左右反転して進む向き（右）に向かせる
+  const COMP_POS = {
+    kohai: { x: -31, ph: 1.2, tilt: 1.5 },
+    vet: { x: 33, ph: 2.1, tilt: 1.2, flip: true },
+    cat: { x: -15, ph: 0.6, tilt: 3, flip: true },
+  };
   function drawComp(id, v) {
     const pos = COMP_POS[id];
     const walkW = v.walkW || 0;
     const gait = (v.gait || 0) + pos.ph;
-    const frame = id === 'cat' && walkW > 0.3 ? (Math.floor(gait / Math.PI) & 1) : 0;
-    const img = Sprites.comp(id, frame);
+    const pic = Sprites.compImage(id);
+    const frame = !pic && id === 'cat' && walkW > 0.3 ? (Math.floor(gait / Math.PI) & 1) : 0;
+    const img = pic || Sprites.comp(id, frame);
+    const sc = pic ? 1 : SCALE; // 画像版はゆらと同じく等倍
     let dy = -Math.abs(Math.cos(gait)) * (id === 'cat' ? 3 : 2) * walkW;
     dy += Math.sin((v.t || 0) * 2 + pos.ph) * 1 * (1 - walkW);
     if (id === 'cat' && v.catHop > 0) dy -= Math.sin((1 - v.catHop / 0.5) * Math.PI) * 9;
-    const w = img.width * SCALE;
-    const h = img.height * SCALE;
+    const w = img.width * sc;
+    const h = img.height * sc;
     const cx = (YURA_CX + pos.x) * SCALE;
     mctx.fillStyle = 'rgba(0,0,0,0.3)';
     mctx.fillRect(Math.round(cx - w * 0.35), GY * SCALE + 1, Math.round(w * 0.7), 3);
-    mctx.drawImage(img, Math.round(cx - w / 2), Math.round(GY * SCALE + 3 - h + dy), w, h);
-    if (id === 'vet') lights.push({ x: YURA_CX + pos.x + 6, y: GY - 11, r: 14 }); // ゲンさんのランタン
+    // 足もとを軸に、歩調に合わせて小さく傾ける
+    const tilt = Math.sin(gait) * pos.tilt * walkW;
+    mctx.save();
+    mctx.translate(Math.round(cx), Math.round(GY * SCALE + 3 + dy));
+    if (tilt) mctx.rotate((tilt * Math.PI) / 180);
+    if (pic && pos.flip) mctx.scale(-1, 1);
+    mctx.drawImage(img, -Math.round(w / 2), -h, w, h);
+    mctx.restore();
+    // 暗闇の中でも仲間が見えるように少し照らす（ゲンさんは帽子のヘッドライト）
+    const lx = YURA_CX + pos.x;
+    if (id === 'vet') lights.push({ x: lx - 4, y: GY - h / SCALE + 6, r: 18 });
+    else lights.push({ x: lx, y: GY - h / SCALE / 2, r: id === 'cat' ? 9 : 13 });
   }
   function drawCompanions(v, front) {
     const c = v.comps || {};

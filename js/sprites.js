@@ -813,6 +813,19 @@ const Sprites = (() => {
     return iconUrlCache[name];
   }
 
+  /* 仲間のドット絵画像（img/comp_*.png）。読み込めないときは文字マップ版で描く */
+  const compImgs = {};
+  function loadCompImages(map) {
+    for (const id in map) {
+      const im = new Image();
+      im.onload = () => (compImgs[id] = im);
+      im.src = map[id];
+    }
+  }
+  function compImage(id) {
+    return compImgs[id] || null;
+  }
+
   const compCache = {};
   function comp(id, frame = 0) {
     const key = id + ':' + frame;
@@ -832,5 +845,5 @@ const Sprites = (() => {
     return compUrlCache[key];
   }
 
-  return { yura, yuraImage, loadYuraImage, ghost, ghostURL, iconURL, comp, compURL };
+  return { yura, yuraImage, loadYuraImage, ghost, ghostURL, iconURL, comp, compURL, loadCompImages, compImage };
 })();
