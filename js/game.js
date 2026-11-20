@@ -1108,23 +1108,33 @@ function start() {
   const had = load();
   Sprites.loadYuraImage('img/yura_pixel.png');
   Sprites.loadCompImages({ cat: 'img/comp_cat.png', kohai: 'img/comp_kohai.png', vet: 'img/comp_vet.png' });
+  Sound.setVolumes(S.vol.sfx, S.vol.amb);
   Sound.setMuted(S.muted);
   // ブラウザの決まりで、音は最初の操作のあとから鳴らせる
   document.addEventListener('pointerdown', () => Sound.ambientStart(), { passive: true });
   Scene.init($('#scene'));
   Backdrop.init();
-  buildUpgrades();
-  buildSpots();
-  buildRecords();
-  buildCollection();
-  buildAchievements();
-  buildCompanions();
-  buildRebirth();
-  setupVolume();
-  setupSheets();
-  setupRanking();
-  setupStepEvent();
-  setupTabs();
+  // 画面づくり。どれか1つで失敗しても、ゲーム本体は動くようにする
+  //（更新直後に古いファイルが混ざった場合などの保険）
+  const safe = (name, fn) => {
+    try {
+      fn();
+    } catch (e) {
+      console.error(`${name} の準備に失敗しました`, e);
+    }
+  };
+  safe('装備', buildUpgrades);
+  safe('スポット', buildSpots);
+  safe('記録', buildRecords);
+  safe('心霊写真', buildCollection);
+  safe('実績', buildAchievements);
+  safe('仲間', () => buildCompanions());
+  safe('転生', () => buildRebirth());
+  safe('音量', () => setupVolume());
+  safe('パネル', () => setupSheets());
+  safe('ランキング', () => setupRanking());
+  safe('足音', setupStepEvent);
+  safe('タブ', setupTabs);
   // 実績機能より前のセーブは、達成済みの実績を通知なしで記録する
   checkAchievements(!S.achInit);
   S.achInit = true;
