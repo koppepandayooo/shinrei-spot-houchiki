@@ -341,10 +341,11 @@ function updateRankUI(editing) {
   $('#rankJoined').classList.toggle('hidden', !joined);
   $('#rankHead').textContent = joined ? 'ランキングに参加中' : S.playerName ? '名前を変更' : '名前を登録して参加';
   $('#rankNote').textContent = joined
-    ? 'スコア（総獲得フィルム）は自動で送信されます。送信ボタンを押す必要はありません。'
-    : 'スコアは「総獲得フィルム」です。ログインは不要で、名前を登録すると、あとは自動で送信されます（12文字まで）。';
+    ? 'スコアは「総獲得フィルム」です。'
+    : 'スコアは「総獲得フィルム」です。名前を登録すると参加できます（12文字まで・ログイン不要）。';
   $('#rankMeName').textContent = S.playerName;
   $('#rankSend').textContent = S.playerName ? '変更' : '登録';
+  refreshBoardButtons();
   if (!joined) $('#rankName').value = S.playerName;
 }
 function setupRanking() {
@@ -362,6 +363,7 @@ function setupRanking() {
     $('#rankName').focus();
   });
   $('#rankReload').addEventListener('click', loadRanking);
+  setupBoard();
   // 5分ごとに、スコアが増えていれば自動送信
   setInterval(() => {
     if (!document.hidden) autoSubmit();
@@ -426,12 +428,14 @@ async function submitScore(manual) {
     if (status === 200 && data.ok) {
       rankLastScore = score;
       rankLastAt = Date.now();
+      if (!manual) loadBoard();
       if (!S.ranked) {
         S.ranked = true;
         checkAchievements();
         save();
       }
-      if (manual) rankMsg(`登録しました！ いまの順位：${data.rank}位（このあとは自動で送信されます）`, true);
+      if (manual) rankMsg(`登録しました！ いまの順位：${data.rank}位`, true);
+      loadBoard();
     } else if (status === 429) {
       rankLastAt = Date.now();
       if (manual) rankMsg('少し前に送信したばかりです。しばらくすると自動で送られます。', true);
@@ -456,6 +460,59 @@ async function openRanking() {
   await loadRanking();
 }
 const SPOT_SHORT = ['旧小峰', '道了堂', '八王子城', '旧吹上', '旧旧吹上'];
+function renderRankRows(list, entries) {
+  list.innerHTML = '';
+  if (!entries.length) list.innerHTML = '<li class="rank-empty">まだ誰も登録していません。一番乗りのチャンス！</li>';
+  entries.forEach((e) => {
+    const li = document.createElement('li');
+    li.className = 'rank-row' + (e.me ? ' me' : '') + (e.rank <= 3 ? ' top' + e.rank : '');
+    const no = document.createElement('span');
+    no.className = 'rank-no';
+    no.textContent = e.rank;
+    const nm = document.createElement('span');
+    nm.className = 'rank-name';
+    nm.textContent = e.name;
+    const meta = document.createElement('span');
+    meta.className = 'rank-meta';
+    meta.textContent = `${SPOT_SHORT[(e.spot || 1) - 1] || ''}${e.rebirths ? `・転生${e.rebirths}` : ''}`;
+    const sc = document.createElement('span');
+    sc.className = 'rank-score';
+    sc.textContent = fmt(e.score);
+    li.append(no, nm, meta, sc);
+    list.appendChild(li);
+  });
+}
+// 常に表示するランキング（上位10人と自分の順位）
+function renderBoard(data) {
+  document.querySelectorAll('.rb-list').forEach((el) => renderRankRows(el, data.entries.slice(0, 10)));
+  const me = data.me ? `${S.playerName || 'あなた'}：${data.me.rank}位` : S.playerName ? '' : '未参加';
+  document.querySelectorAll('.rb-me').forEach((el) => (el.textContent = me));
+}
+function refreshBoardButtons() {
+  document.querySelectorAll('.rb-open').forEach((b) => (b.textContent = S.playerName ? 'TOP50' : '参加する'));
+}
+async function loadBoard() {
+  if (!RANKING_API) return;
+  refreshBoardButtons();
+  try {
+    const { status, data } = await rankFetch('/api/ranking?limit=10&id=' + encodeURIComponent(ensurePlayerId()));
+    if (status !== 200 || !Array.isArray(data.entries)) throw new Error(String(status));
+    renderBoard(data);
+  } catch (e) {
+    document.querySelectorAll('.rb-list').forEach((el) => (el.innerHTML = '<li class="rank-empty">ランキングを読み込めませんでした。</li>'));
+  }
+}
+function setupBoard() {
+  if (!RANKING_API) return;
+  document.querySelectorAll('.rank-board').forEach((b) => b.classList.remove('hidden'));
+  document.querySelectorAll('.rb-ico').forEach((i) => (i.src = Sprites.iconURL('trophy')));
+  document.querySelectorAll('.rb-open').forEach((b) => b.addEventListener('click', openRanking));
+  loadBoard();
+  // 1分ごとに更新（画面が見えているときだけ）
+  setInterval(() => {
+    if (!document.hidden) loadBoard();
+  }, 60 * 1000);
+}
 async function loadRanking() {
   if (!RANKING_API) return;
   const list = $('#rankList');
@@ -463,26 +520,8 @@ async function loadRanking() {
   try {
     const { status, data } = await rankFetch('/api/ranking?limit=50&id=' + encodeURIComponent(ensurePlayerId()));
     if (status !== 200 || !Array.isArray(data.entries)) throw new Error(String(status));
-    list.innerHTML = '';
-    if (!data.entries.length) list.innerHTML = '<li class="rank-empty">まだ誰も登録していません。一番乗りのチャンス！</li>';
-    data.entries.forEach((e) => {
-      const li = document.createElement('li');
-      li.className = 'rank-row' + (e.me ? ' me' : '') + (e.rank <= 3 ? ' top' + e.rank : '');
-      const no = document.createElement('span');
-      no.className = 'rank-no';
-      no.textContent = e.rank;
-      const nm = document.createElement('span');
-      nm.className = 'rank-name';
-      nm.textContent = e.name;
-      const meta = document.createElement('span');
-      meta.className = 'rank-meta';
-      meta.textContent = `${SPOT_SHORT[(e.spot || 1) - 1] || ''}${e.rebirths ? `・転生${e.rebirths}` : ''}`;
-      const sc = document.createElement('span');
-      sc.className = 'rank-score';
-      sc.textContent = fmt(e.score);
-      li.append(no, nm, meta, sc);
-      list.appendChild(li);
-    });
+    renderRankRows(list, data.entries);
+    renderBoard(data);
     $('#rankMine').textContent = data.me ? `あなたの順位：${data.me.rank}位（${fmt(data.me.score)}）` : S.playerName ? '' : 'まだ参加していません';
   } catch (e) {
     list.innerHTML = '<li class="rank-empty">ランキングを読み込めませんでした。</li>';

@@ -837,3 +837,38 @@ body.sheet-open { overflow: hidden; }
 .rank-joined { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0; font-size: 14px; }
 .rank-joined b { color: var(--gold); font-weight: normal; }
 .rank-joined .btn.small { float: none; }
+
+/* ---------- 常に見えるランキング ----------
+ * PC：ゲーム画面の下（ゲーム画面と一緒に追従）／スマホ：ページの下（タブの下） */
+.left-col { display: contents; } /* スマホでは中身をそのまま並べる（ゲーム画面の追従を保つ） */
+.rank-board.desk { display: none; }
+.rank-board.mob { margin-top: 14px; }
+.rank-board.hidden { display: none !important; }
+.rank-board-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.rank-board-head h3 { margin: 0; font-size: 14px; color: #fff; display: flex; align-items: center; gap: 4px; }
+.rb-ico { width: 16px; height: 16px; }
+.rb-me { flex: 1; font-size: 12px; color: var(--gold); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rank-board-head .btn.small { float: none; flex: none; }
+.rank-mini .rank-row { padding: 2px 4px; font-size: 12px; }
+.rank-mini .rank-meta { display: none; }
+
+@media (min-width: 860px) {
+  .left-col {
+    display: block;
+    grid-area: top;
+    position: sticky;
+    top: 12px;
+  }
+  .left-col .sticky-top { position: static; }
+  .rank-board.desk { display: block; margin-top: 14px; }
+  .rank-board.mob { display: none; }
+  /* 横幅があるので、上位10人を2列（1〜5位・6〜10位）で */
+  .rank-board.desk .rank-mini {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: repeat(5, auto);
+    grid-auto-flow: column;
+    column-gap: 16px;
+  }
+  .rank-board.desk .rank-mini .rank-meta { display: inline; }
+}
