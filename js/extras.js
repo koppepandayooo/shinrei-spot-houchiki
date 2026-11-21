@@ -337,14 +337,25 @@ function setupSheets() {
 
 /* ---------- オンラインランキング（Cloudflare Workers に送る） ----------
  * 名前を一度登録すれば、あとは自動で送信する：
- *  - ランキングを開いたとき
- *  - 5分ごと（スコアが増えていれば）
+ *  - プレイしている間、30分ごと
+ *  - スポットを移動したとき（新しいスポットを解放したときも）
+ *  - ランキングを開いたとき・「更新」を押したとき
  *  - 転生したとき
- *  - ゲームを閉じる・別のアプリに切り替えるとき */
+ *  - ゲームを閉じる・別のアプリに切り替えるとき
+ * サーバーは同じ人からの送信を20秒に1回までしか受け付けないので、
+ * 間隔が短すぎるときは、受け付けられるようになってからまとめて1回送る */
 let rankBusy = false;
 let rankLastScore = -1; // 最後に送ったスコア
+let rankLastSpot = 0; // 最後に送った到達スポット
 let rankLastAt = 0; // 最後に送った時刻
+let rankTimer = null; // 後で送る予約
 const RANK_MIN_GAP = 25 * 1000; // サーバーの制限（20秒）より少し長く
+const RANK_AUTO_EVERY = 30 * 60 * 1000; // プレイ中の自動送信の間隔
+// ランキングに出すスポット：これまでに到達した一番奥（転生して最初に戻っても下がらない）
+// 1〜7＝通常スポット（弱い順）、8＝隠しスポット。サーバーも、同じ人の記録は一番奥のものを残す
+const reachedSpotNo = () => (S.secretSeen || S.secretOpen ? STAGES.length : Math.max(S.unlocked, S.bestUnlocked || 1));
+// 前回送ったときから、スコアか到達スポットが変わったか
+const rankDirty = () => Math.floor(S.total) > rankLastScore || reachedSpotNo() !== rankLastSpot;
 function ensurePlayerId() {
   if (S.playerId) return S.playerId;
   S.playerId =
@@ -361,7 +372,8 @@ async function rankFetch(path, opts = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 8000);
   try {
-    const res = await fetch(rankURL(path), { ...opts, signal: ctrl.signal });
+    // ブラウザに古い一覧を使い回させない
+    const res = await fetch(rankURL(path), { cache: 'no-store', ...opts, signal: ctrl.signal });
     const data = await res.json().catch(() => ({}));
     return { status: res.status, data };
   } finally {
@@ -378,7 +390,7 @@ function scorePayload() {
     id: ensurePlayerId(),
     name: S.playerName,
     score: Math.floor(S.total),
-    spot: S.secretOpen ? STAGES.length : S.unlocked,
+    spot: reachedSpotNo(),
     rebirths: S.rebirths,
     photos: S.ghosts,
   });
@@ -410,12 +422,17 @@ function setupRanking() {
     updateRankUI(true);
     $('#rankName').focus();
   });
-  $('#rankReload').addEventListener('click', loadRanking);
+  // 「更新」：自分の最新のスコアを送ってから、一覧を読み直す
+  $('#rankReload').addEventListener('click', async () => {
+    if (S.playerName && rankDirty() && Date.now() - rankLastAt >= RANK_MIN_GAP) await submitScore(false);
+    else queueSubmit();
+    await loadRanking();
+  });
   setupBoard();
-  // 5分ごとに、スコアが増えていれば自動送信
+  // プレイしている間は30分ごとに自動送信（画面が見えているときだけ）
   setInterval(() => {
     if (!document.hidden) autoSubmit();
-  }, 60 * 1000);
+  }, RANK_AUTO_EVERY);
   // ゲームを閉じる・裏に回すときにも送る（ページが閉じても届く sendBeacon を使う）
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) beaconSubmit();
@@ -444,20 +461,35 @@ async function registerName() {
   await submitScore(true);
   await loadRanking();
 }
-// スコアが増えていて、前回から少し時間がたっていれば送る
+// スコアか到達スポットが変わっていれば送る（間隔が短すぎるときは、あとで送る予約をする）
 function autoSubmit() {
   if (!RANKING_API || !S.playerName || tabPaused) return;
-  if (Math.floor(S.total) <= rankLastScore) return;
-  if (Date.now() - rankLastAt < RANK_MIN_GAP) return;
-  submitScore(false);
+  if (!rankDirty()) return;
+  queueSubmit();
+}
+function queueSubmit() {
+  if (!RANKING_API || !S.playerName || tabPaused) return;
+  clearTimeout(rankTimer);
+  rankTimer = null;
+  const wait = RANK_MIN_GAP - (Date.now() - rankLastAt);
+  if (wait <= 0 && !rankBusy) {
+    if (rankDirty()) submitScore(false);
+    return;
+  }
+  rankTimer = setTimeout(queueSubmit, Math.max(wait, 1000) + 500);
+}
+// スポットを移動したとき（game.js の goStage から呼ぶ）
+function onStageChangedForRanking() {
+  if (RANKING_API && S.playerName) queueSubmit();
 }
 function beaconSubmit() {
   if (!RANKING_API || !S.playerName || !navigator.sendBeacon || tabPaused) return;
-  if (Math.floor(S.total) <= rankLastScore || Date.now() - rankLastAt < RANK_MIN_GAP) return;
+  if (!rankDirty() || Date.now() - rankLastAt < RANK_MIN_GAP) return;
   // text/plain で送ると事前確認（プリフライト）なしで届く。サーバーは中身を JSON として読む
   const ok = navigator.sendBeacon(rankURL('/api/score'), new Blob([scorePayload()], { type: 'text/plain' }));
   if (ok) {
     rankLastScore = Math.floor(S.total);
+    rankLastSpot = reachedSpotNo();
     rankLastAt = Date.now();
   }
 }
@@ -466,6 +498,7 @@ async function submitScore(manual) {
   if (!manual && Date.now() - rankLastAt < RANK_MIN_GAP) return;
   rankBusy = true;
   const score = Math.floor(S.total);
+  const spot = reachedSpotNo();
   if (manual) rankMsg('送信中…', true);
   try {
     const { status, data } = await rankFetch('/api/score', {
@@ -475,8 +508,8 @@ async function submitScore(manual) {
     });
     if (status === 200 && data.ok) {
       rankLastScore = score;
+      rankLastSpot = spot;
       rankLastAt = Date.now();
-      if (!manual) loadBoard();
       if (!S.ranked) {
         S.ranked = true;
         checkAchievements();
@@ -484,9 +517,12 @@ async function submitScore(manual) {
       }
       if (manual) rankMsg(`登録しました！ いまの順位：${data.rank}位`, true);
       loadBoard();
+      // 送っている間にさらに変わっていたら（スポットを続けて移動したときなど）、あとでもう一度
+      if (rankDirty()) queueSubmit();
     } else if (status === 429) {
       rankLastAt = Date.now();
       if (manual) rankMsg('少し前に送信したばかりです。しばらくすると自動で送られます。', true);
+      setTimeout(queueSubmit, 0); // 受け付けられるようになったら送る
     } else if (manual) {
       rankMsg(`送信できませんでした（${data.error || status}）。`, false);
     }
@@ -502,12 +538,20 @@ async function openRanking() {
   if (!RANKING_API) return;
   $('#rankMsg').textContent = '';
   // 参加中なら、最新のスコアを送ってからランキングを表示
-  if (S.playerName && Math.floor(S.total) > rankLastScore && Date.now() - rankLastAt >= RANK_MIN_GAP) {
-    await submitScore(false);
-  }
+  if (S.playerName && rankDirty() && Date.now() - rankLastAt >= RANK_MIN_GAP) await submitScore(false);
+  else if (S.playerName) queueSubmit();
   await loadRanking();
 }
 const SPOT_SHORT = ['電話ボックス', '陵北大橋', '旧満地', '道了堂', '旧小峰', '旧吹上', '八王子城', '旧旧吹上'];
+/* ネタバレ防止：ランキングの到達スポットは、見ている本人がまだ到達（解放）していなければ「？？？」にする。
+ * 隠しスポットは、本人が一度でもたどり着いたことがある場合だけ名前を出す */
+function rankSpotLabel(spot) {
+  const i = (spot || 1) - 1;
+  const st = STAGES[i];
+  if (!st) return '';
+  const known = st.secret ? !!S.secretSeen : i < Math.max(S.unlocked, S.bestUnlocked || 1);
+  return known ? SPOT_SHORT[i] || st.name : '？？？';
+}
 function renderRankRows(list, entries) {
   list.innerHTML = '';
   if (!entries.length) list.innerHTML = '<li class="rank-empty">まだ誰も登録していません。一番乗りのチャンス！</li>';
@@ -522,7 +566,7 @@ function renderRankRows(list, entries) {
     nm.textContent = e.name;
     const meta = document.createElement('span');
     meta.className = 'rank-meta';
-    meta.textContent = SPOT_SHORT[(e.spot || 1) - 1] || '';
+    meta.textContent = rankSpotLabel(e.spot);
     const sc = document.createElement('span');
     sc.className = 'rank-score';
     sc.textContent = fmt(e.score);
@@ -573,7 +617,7 @@ function setupBoard() {
   document.querySelectorAll('.rb-ico').forEach((i) => (i.src = Sprites.iconURL('trophy')));
   document.querySelectorAll('.rb-open').forEach((b) => b.addEventListener('click', openRanking));
   loadBoard();
-  // 1分ごとに更新（画面が見えているときだけ）
+  // 30秒ごとに一覧を読み直す（画面が見えているときだけ）
   setInterval(() => {
     if (!document.hidden) loadBoard();
   }, 30 * 1000);

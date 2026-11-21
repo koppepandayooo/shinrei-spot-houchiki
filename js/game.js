@@ -563,6 +563,7 @@ function goStage(i) {
   V.cycle = 0;
   V.ghost = null;
   log(`ゆらは「${STAGES[i].name}」にやってきた。`);
+  if (typeof onStageChangedForRanking === 'function') onStageChangedForRanking(); // スポットを移動したら、ランキングにも送る
   buildSpots();
   buildCollection();
   refreshUI(true);
