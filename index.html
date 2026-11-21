@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261121-12">
+  <link rel="stylesheet" href="css/style.css?v=20261121-13">
 </head>
 <body>
   <canvas id="backdrop" aria-hidden="true"></canvas>
@@ -140,6 +140,11 @@
           <button type="button" class="btn" id="realWorldBtn">現実の時刻・天気と連動：ON</button>
           <p class="note">ONのときは、日本時間の時刻で昼・夕方・夜が切り替わり、各スポットのあたりの現実の天気（<a href="https://open-meteo.com/" target="_blank" rel="noopener">Weather data by Open-Meteo.com</a>・<a href="https://creativecommons.org/licenses/by/4.0/deed.ja" target="_blank" rel="noopener">CC BY 4.0</a>）が画面に反映されます。位置情報は使いません。OFFにすると、いつもの夜の表示になります。</p>
         </div>
+        <div class="card settings about">
+          <h3>このゲームについて</h3>
+          <p class="note">バージョン：<span id="gameVersion"></span></p>
+          <button type="button" class="btn" id="updatesBtn">アップデート情報を見る</button>
+        </div>
         <div class="card savecode">
           <h3>セーブデータ</h3>
           <p class="note">セーブはこのブラウザに自動で保存されます。「書き出す」で表示される文字列（セーブコード）をメモ帳などに保管しておくと、別のブラウザやスマホに貼り付けて続きから遊べます。</p>
@@ -221,15 +226,16 @@
   </div>
 
   <!-- ?v= はキャッシュ対策。ファイルを更新したら index.html の v= の値をすべて新しくする -->
-  <script src="js/config.js?v=20261121-12"></script>
-  <script src="js/data.js?v=20261121-12"></script>
-  <script src="js/sprites.js?v=20261121-12"></script>
-  <script src="js/scene.js?v=20261121-12"></script>
-  <script src="js/sound.js?v=20261121-12"></script>
-  <script src="js/backdrop.js?v=20261121-12"></script>
-  <script src="js/weather.js?v=20261121-12"></script>
-  <script src="js/game.js?v=20261121-12"></script>
-  <script src="js/extras.js?v=20261121-12"></script>
-  <script src="js/realworld.js?v=20261121-12"></script>
+  <script src="js/config.js?v=20261121-13"></script>
+  <script src="js/data.js?v=20261121-13"></script>
+  <script src="js/sprites.js?v=20261121-13"></script>
+  <script src="js/scene.js?v=20261121-13"></script>
+  <script src="js/sound.js?v=20261121-13"></script>
+  <script src="js/backdrop.js?v=20261121-13"></script>
+  <script src="js/weather.js?v=20261121-13"></script>
+  <script src="js/updates.js?v=20261121-13"></script>
+  <script src="js/game.js?v=20261121-13"></script>
+  <script src="js/extras.js?v=20261121-13"></script>
+  <script src="js/realworld.js?v=20261121-13"></script>
 </body>
 </html>

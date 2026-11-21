@@ -985,3 +985,10 @@ body.sheet-open { overflow: hidden; }
   .wx-btn { font-size: 10px; padding: 0 4px; }
   .wx-credit { font-size: 8px; }
 }
+
+/* ---------- アップデート情報 ---------- */
+.update-list { text-align: left; max-height: 52vh; overflow-y: auto; padding-right: 4px; }
+.update-list h3 { margin: 6px 0 4px; font-size: 15px; font-weight: normal; color: var(--ghost); }
+.update-list h3 small { margin-left: 4px; font-size: 12px; }
+.update-list ul { margin: 0 0 10px 1.2em; padding: 0; }
+.update-list li { margin: 3px 0; }

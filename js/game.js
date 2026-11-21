@@ -373,11 +373,14 @@ function askConfirm({ title, html, ok = 'OK', cancel = 'やめる', danger = fal
 }
 
 const modalQueue = [];
-function showModal(title, html, btn = 'OK') {
+// onClose：閉じたときに呼ぶ関数（なくてもよい）
+let modalOnClose = null;
+function showModal(title, html, btn = 'OK', onClose = null) {
   if (!$('#modal').classList.contains('hidden')) {
-    modalQueue.push([title, html, btn]);
+    modalQueue.push([title, html, btn, onClose]);
     return;
   }
+  modalOnClose = onClose;
   $('#modalTitle').textContent = title;
   $('#modalBody').innerHTML = html;
   $('#modalOk').textContent = btn;
@@ -385,6 +388,9 @@ function showModal(title, html, btn = 'OK') {
 }
 function hideModal() {
   $('#modal').classList.add('hidden');
+  const cb = modalOnClose;
+  modalOnClose = null;
+  if (cb) cb();
   const next = modalQueue.shift();
   if (next) showModal(...next);
 }
@@ -1296,6 +1302,7 @@ function start() {
   safe('ランキング', () => setupRanking());
   safe('足音', setupStepEvent);
   safe('時刻と天気', () => setupRealWorld());
+  safe('バージョン', () => setupVersionInfo());
   safe('タブ', setupTabs);
   // 実績機能より前のセーブは、達成済みの実績を通知なしで記録する
   checkAchievements(!S.achInit);
@@ -1320,6 +1327,7 @@ function start() {
     log('画面をタップすると撮影できるよ！', 'gold');
     checkDaily();
   }
+  safe('アップデート情報', () => checkUpdateInfo(had));
 
   // タブを裏に回したとき：音を止めて保存するだけ。戻ってきても放置報酬は付けない
   //（裏にある間は画面の更新が止まるので、収入も進まない）
