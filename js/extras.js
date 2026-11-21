@@ -354,8 +354,16 @@ const RANK_AUTO_EVERY = 30 * 60 * 1000; // プレイ中の自動送信の間隔
 // ランキングに出すスポット：これまでに到達した一番奥（転生して最初に戻っても下がらない）
 // 1〜7＝通常スポット（弱い順）、8＝隠しスポット。サーバーも、同じ人の記録は一番奥のものを残す
 const reachedSpotNo = () => (S.secretSeen || S.secretOpen ? STAGES.length : Math.max(S.unlocked, S.bestUnlocked || 1));
+// ランキングのスコア：このシーズン（ランキングのリセット後）に獲得したフィルム
+function rankScore() {
+  if (S.rankSeason !== RANK_SEASON) {
+    S.rankBase = S.total;
+    S.rankSeason = RANK_SEASON;
+  }
+  return Math.max(0, Math.floor(S.total - (S.rankBase || 0)));
+}
 // 前回送ったときから、スコアか到達スポットが変わったか
-const rankDirty = () => Math.floor(S.total) > rankLastScore || reachedSpotNo() !== rankLastSpot;
+const rankDirty = () => rankScore() > rankLastScore || reachedSpotNo() !== rankLastSpot;
 function ensurePlayerId() {
   if (S.playerId) return S.playerId;
   S.playerId =
@@ -389,7 +397,8 @@ function scorePayload() {
   return JSON.stringify({
     id: ensurePlayerId(),
     name: S.playerName,
-    score: Math.floor(S.total),
+    score: rankScore(),
+    season: RANK_SEASON,
     spot: reachedSpotNo(),
     rebirths: S.rebirths,
     photos: S.ghosts,
@@ -401,8 +410,8 @@ function updateRankUI(editing) {
   $('#rankJoined').classList.toggle('hidden', !joined);
   $('#rankHead').textContent = joined ? 'ランキングに参加中' : S.playerName ? '名前を変更' : '名前を登録して参加';
   $('#rankNote').textContent = joined
-    ? 'スコアは「総獲得フィルム」です。'
-    : 'スコアは「総獲得フィルム」です。名前を登録すると参加できます（12文字まで・ログイン不要）。';
+    ? 'スコアは、ランキングのリセット後に獲得したフィルムです。'
+    : 'スコアは、ランキングのリセット後に獲得したフィルムです。名前を登録すると参加できます（12文字まで・ログイン不要）。';
   $('#rankMeName').textContent = S.playerName;
   $('#rankSend').textContent = S.playerName ? '変更' : '登録';
   refreshBoardButtons();
@@ -488,7 +497,7 @@ function beaconSubmit() {
   // text/plain で送ると事前確認（プリフライト）なしで届く。サーバーは中身を JSON として読む
   const ok = navigator.sendBeacon(rankURL('/api/score'), new Blob([scorePayload()], { type: 'text/plain' }));
   if (ok) {
-    rankLastScore = Math.floor(S.total);
+    rankLastScore = rankScore();
     rankLastSpot = reachedSpotNo();
     rankLastAt = Date.now();
   }
@@ -497,7 +506,7 @@ async function submitScore(manual) {
   if (!RANKING_API || rankBusy || !S.playerName) return;
   if (!manual && Date.now() - rankLastAt < RANK_MIN_GAP) return;
   rankBusy = true;
-  const score = Math.floor(S.total);
+  const score = rankScore();
   const spot = reachedSpotNo();
   if (manual) rankMsg('送信中…', true);
   try {
@@ -642,5 +651,5 @@ setInterval(() => {
   if (typeof S === 'undefined') return;
   refreshCompanions();
   refreshRebirth();
-  if ($('#rankScore')) $('#rankScore').textContent = fmt(S.total);
+  if ($('#rankScore')) $('#rankScore').textContent = fmt(rankScore());
 }, 400);

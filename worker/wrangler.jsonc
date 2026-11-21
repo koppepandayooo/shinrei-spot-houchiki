@@ -10,7 +10,9 @@
   },
   "vars": {
     // スコアの送信を受け付けるサイト（カンマ区切り）
-    "ALLOWED_ORIGINS": "https://koppepandayooo.github.io,http://localhost:8765"
+    "ALLOWED_ORIGINS": "https://koppepandayooo.github.io,http://localhost:8765",
+    // ランキングのシーズン番号。リセットするときに1つ増やし、js/config.js の RANK_SEASON も同じにする
+    "RANK_SEASON": "2"
   },
   "d1_databases": [
     {

@@ -120,6 +120,9 @@ async function postScore(request, env, cors) {
   const spot = clampInt(body.spot, 1, 8); // 1〜7 = 通常スポット（弱い順）、8 = 隠しスポット
   const rebirths = clampInt(body.rebirths, 0, 1_000_000);
   const photos = clampInt(body.photos, 0, 100_000_000);
+  // ランキングのシーズン（リセットのたびに1つ増える）。違うシーズンのスコアは受け付けない
+  const season = Number(env.RANK_SEASON || 1);
+  if (Number(body.season || 1) !== season) return json({ error: 'old_season' }, 409, cors);
 
   // 送信間隔の制限（id ごと・IP ごと）
   const now = Date.now();
