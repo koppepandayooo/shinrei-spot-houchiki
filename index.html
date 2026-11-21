@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261121-18">
+  <link rel="stylesheet" href="css/style.css?v=20261122-6">
 </head>
 <body>
   <canvas id="backdrop" aria-hidden="true"></canvas>
@@ -61,14 +61,32 @@
         </div>
       </section>
     </div>
+      <div class="social-row desk">
       <section class="card rank-board desk hidden" aria-label="ランキング">
         <div class="rank-board-head">
-          <h3><img class="icon-s rb-ico" alt="">ランキング</h3>
+          <h3><img class="icon-s rb-ico" alt="">ランキング<span class="rb-next"></span></h3>
           <span class="rb-me"></span>
           <button type="button" class="btn small rb-open">参加する</button>
         </div>
         <ol class="rank-list rank-mini rb-list"><li class="rank-empty">読み込み中…</li></ol>
       </section>
+      <section class="card chat-board desk hidden" aria-label="チャット">
+        <div class="rank-board-head">
+          <h3><img class="icon-s cb-ico" alt="">チャット</h3>
+          <span class="cb-note">個人情報は書かないでね</span>
+        </div>
+        <ol class="chat-list cb-list"><li class="chat-empty">読み込み中…</li></ol>
+        <div class="chat-form cb-form hidden">
+          <input type="text" class="cb-text" maxlength="80" placeholder="ひとこと（80文字まで）" autocomplete="off" aria-label="チャットに書き込む">
+          <button type="button" class="btn affordable small cb-send">送信</button>
+        </div>
+        <div class="cb-noname hidden">
+          <span class="note">書き込むには、設定で名前を決めてね</span>
+          <button type="button" class="btn small cb-to-rank">名前を決める</button>
+        </div>
+        <p class="code-msg cb-msg"></p>
+      </section>
+      </div>
     </div>
 
     <section class="panel">
@@ -111,12 +129,28 @@
 
     <section class="card rank-board mob hidden" aria-label="ランキング">
       <div class="rank-board-head">
-        <h3><img class="icon-s rb-ico" alt="">ランキング</h3>
+        <h3><img class="icon-s rb-ico" alt="">ランキング<span class="rb-next"></span></h3>
         <span class="rb-me"></span>
         <button type="button" class="btn small rb-open">参加する</button>
       </div>
       <ol class="rank-list rank-mini rb-list"><li class="rank-empty">読み込み中…</li></ol>
     </section>
+    <section class="card chat-board mob hidden" aria-label="チャット">
+        <div class="rank-board-head">
+          <h3><img class="icon-s cb-ico" alt="">チャット</h3>
+          <span class="cb-note">個人情報は書かないでね</span>
+        </div>
+        <ol class="chat-list cb-list"><li class="chat-empty">読み込み中…</li></ol>
+        <div class="chat-form cb-form hidden">
+          <input type="text" class="cb-text" maxlength="80" placeholder="ひとこと（80文字まで）" autocomplete="off" aria-label="チャットに書き込む">
+          <button type="button" class="btn affordable small cb-send">送信</button>
+        </div>
+        <div class="cb-noname hidden">
+          <span class="note">書き込むには、設定で名前を決めてね</span>
+          <button type="button" class="btn small cb-to-rank">名前を決める</button>
+        </div>
+        <p class="code-msg cb-msg"></p>
+      </section>
 
     <footer class="footer">
       <p id="disclaimer"></p>
@@ -127,6 +161,15 @@
     <div class="sheet-box">
       <div class="sheet-head"><h2>設定</h2><button type="button" class="sheet-close" aria-label="閉じる">×</button></div>
       <div class="sheet-body">
+        <div class="card settings name-card" id="nameCard">
+          <h3>名前</h3>
+          <p class="note">ランキングとチャットに表示される名前です（12文字まで）。名前を決めると、ランキングに自動で参加します。</p>
+          <div class="rank-form">
+            <input type="text" id="setName" maxlength="12" placeholder="名前（未設定）" autocomplete="nickname">
+            <button type="button" class="btn affordable" id="setNameSave">保存</button>
+          </div>
+          <p class="code-msg" id="setNameMsg"></p>
+        </div>
         <div class="card settings">
           <h3>音</h3>
           <button type="button" class="btn" id="soundBtn">効果音：ON</button>
@@ -139,6 +182,22 @@
           <p class="note">まぶしいときは「黒」にすると、撮影のときに画面が暗く光ります。</p>
           <button type="button" class="btn" id="realWorldBtn">現実の時刻・天気と連動：ON</button>
           <p class="note">ONのときは、日本時間の時刻で昼・夕方・夜が切り替わり、各スポットのあたりの現実の天気（<a href="https://open-meteo.com/" target="_blank" rel="noopener">Weather data by Open-Meteo.com</a>・<a href="https://creativecommons.org/licenses/by/4.0/deed.ja" target="_blank" rel="noopener">CC BY 4.0</a>）が画面に反映されます。位置情報は使いません。OFFにすると、いつもの夜の表示になります。</p>
+        </div>
+        <div class="card settings feedback hidden" id="feedbackCard">
+          <h3>ご意見・不具合の報告</h3>
+          <p class="note">開発者に直接届きます（ほかのプレイヤーには見えません）。返信はできないので、連絡先などの個人情報は書かないでください。</p>
+          <div class="fb-row">
+            <label for="fbKind">種類</label>
+            <select id="fbKind">
+              <option value="要望">要望</option>
+              <option value="不具合">不具合</option>
+              <option value="感想">感想</option>
+              <option value="その他">その他</option>
+            </select>
+          </div>
+          <textarea id="fbText" rows="4" maxlength="1000" placeholder="ここに書いてください（1000文字まで）"></textarea>
+          <button type="button" class="btn affordable" id="fbSend">送る</button>
+          <p class="code-msg" id="fbMsg"></p>
         </div>
         <div class="card settings about">
           <h3>このゲームについて</h3>
@@ -173,15 +232,11 @@
         </div>
         <div class="hidden" id="rankOn">
           <div class="card rank-me">
-            <h3 id="rankHead">名前を登録して参加</h3>
-            <p class="note" id="rankNote">スコアは、ランキングのリセット後に獲得したフィルムです。ログインは不要で、名前を登録すると、あとは自動で送信されます（12文字まで）。</p>
-            <div class="rank-form" id="rankForm">
-              <input type="text" id="rankName" maxlength="12" placeholder="名前" autocomplete="nickname">
-              <button type="button" class="btn affordable" id="rankSend">登録</button>
-            </div>
-            <div class="rank-joined hidden" id="rankJoined">
-              <span><b id="rankMeName"></b> として参加中</span>
-              <button type="button" class="btn small" id="rankRename">名前を変更</button>
+            <h3 id="rankHead">ランキング</h3>
+            <p class="note" id="rankNote">スコアは、ランキングのリセット後に獲得したフィルムです。設定で名前を決めると、自動で参加します（ログイン不要）。</p>
+            <div class="rank-joined" id="rankJoined">
+              <span id="rankWho"></span>
+              <button type="button" class="btn small" id="rankToName">名前を変える</button>
             </div>
             <p class="note">いまのスコア：<b id="rankScore">0</b>　<span id="rankMine"></span></p>
             <p class="note rank-next" id="rankNext"></p>
@@ -219,6 +274,18 @@
       </div>
     </div>
   </div>
+  <div class="modal hidden" id="nameDlg" role="dialog" aria-modal="true" aria-labelledby="nameDlgTitle">
+    <div class="modal-box">
+      <h2 id="nameDlgTitle">名前を決めよう</h2>
+      <p class="name-dlg-note">ランキングやチャットに表示される名前です（12文字まで）。<br>あとから設定で変えられます。</p>
+      <input type="text" id="nameDlgInput" maxlength="12" placeholder="名前" autocomplete="nickname">
+      <p class="code-msg" id="nameDlgMsg"></p>
+      <div class="confirm-btns">
+        <button type="button" class="btn" id="nameDlgSkip">名前なしで始める</button>
+        <button type="button" class="btn affordable" id="nameDlgOk">この名前で始める</button>
+      </div>
+    </div>
+  </div>
   <div class="toast" id="toast"></div>
   <div class="ach-toast" id="achToast" aria-live="polite">
     <span class="ach-badge">🏆 実績解除</span>
@@ -227,16 +294,17 @@
   </div>
 
   <!-- ?v= はキャッシュ対策。ファイルを更新したら index.html の v= の値をすべて新しくする -->
-  <script src="js/config.js?v=20261121-18"></script>
-  <script src="js/data.js?v=20261121-18"></script>
-  <script src="js/sprites.js?v=20261121-18"></script>
-  <script src="js/scene.js?v=20261121-18"></script>
-  <script src="js/sound.js?v=20261121-18"></script>
-  <script src="js/backdrop.js?v=20261121-18"></script>
-  <script src="js/weather.js?v=20261121-18"></script>
-  <script src="js/updates.js?v=20261121-18"></script>
-  <script src="js/game.js?v=20261121-18"></script>
-  <script src="js/extras.js?v=20261121-18"></script>
-  <script src="js/realworld.js?v=20261121-18"></script>
+  <script src="js/config.js?v=20261122-6"></script>
+  <script src="js/data.js?v=20261122-6"></script>
+  <script src="js/sprites.js?v=20261122-6"></script>
+  <script src="js/scene.js?v=20261122-6"></script>
+  <script src="js/sound.js?v=20261122-6"></script>
+  <script src="js/backdrop.js?v=20261122-6"></script>
+  <script src="js/weather.js?v=20261122-6"></script>
+  <script src="js/updates.js?v=20261122-6"></script>
+  <script src="js/game.js?v=20261122-6"></script>
+  <script src="js/extras.js?v=20261122-6"></script>
+  <script src="js/realworld.js?v=20261122-6"></script>
+  <script src="js/chat.js?v=20261122-6"></script>
 </body>
 </html>

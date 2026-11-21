@@ -938,7 +938,7 @@ body.sheet-open { overflow: hidden; }
     padding-bottom: 8px;
     grid-template-rows: minmax(0, 1fr) auto;
   }
-  .left-col { position: static; min-height: 0; overflow-y: auto; }
+  .left-col { position: static; min-height: 0; overflow-y: auto; align-self: stretch; } /* 下の注意書きに重ならないよう、高さを枠に合わせてはみ出た分はスクロール */
   .panel {
     margin-top: 0;
     display: flex;
@@ -994,3 +994,72 @@ body.sheet-open { overflow: hidden; }
 .update-list li { margin: 3px 0; }
 
 .rank-next { margin-top: -4px; color: var(--muted); font-size: 12px; }
+
+/* ---------- チャット（ランキングの横・スマホではランキングの下に常に表示） ---------- */
+.chat-board.hidden { display: none !important; }
+.chat-board.desk { display: none; }
+.chat-board.mob { margin-top: 14px; }
+.cb-note { flex: 1; text-align: right; font-size: 11px; color: var(--muted); }
+.chat-list {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 4px 6px;
+  height: 150px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--line);
+}
+.chat-row { padding: 3px 2px; border-bottom: 1px dashed rgba(255, 255, 255, 0.08); }
+.chat-head { display: flex; gap: 8px; align-items: baseline; font-size: 11px; }
+.chat-name { color: var(--gold); }
+.chat-row.me .chat-name { color: #9fd0ff; }
+.chat-time { color: var(--muted); font-size: 10px; }
+.chat-text { font-size: 13px; line-height: 1.45; word-break: break-word; }
+.chat-empty { color: var(--muted); font-size: 12px; padding: 8px 2px; }
+.chat-form { display: flex; gap: 6px; }
+.chat-form input { flex: 1; min-width: 0; }
+.cb-noname { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.cb-noname.hidden, .cb-form.hidden { display: none; }
+.cb-noname .note { margin: 0; font-size: 12px; }
+.cb-msg { margin: 4px 0 0; min-height: 0; }
+.cb-msg:empty { display: none; }
+@media (min-width: 860px) {
+  /* ゲーム画面の下：左にランキング（TOP5・細め）、右にチャット */
+  .social-row.desk { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 12px; margin-top: 14px; align-items: stretch; }
+  .social-row.desk .rank-board.desk { margin-top: 0; }
+  .chat-board.desk { display: flex; flex-direction: column; }
+  .chat-board.desk .chat-list { flex: 1; height: auto; min-height: 80px; max-height: 112px; }
+  .chat-board.mob { display: none; }
+}
+/* ---------- 意見・不具合の報告 ---------- */
+.fb-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px; }
+#fbText { width: 100%; box-sizing: border-box; margin-bottom: 6px; resize: vertical; }
+.chat-form input, #fbText, #fbKind {
+  background: #0a0812; color: var(--text); border: 2px solid var(--line);
+  font-family: inherit; font-size: 15px; padding: 5px 8px;
+}
+#fbKind { font-size: 14px; padding: 3px 6px; }
+
+/* ---------- ランキング（常時表示）：TOP5・細め ---------- */
+@media (min-width: 860px) {
+  .rank-board.desk .rank-mini { max-height: none; overflow: visible; }
+  .rank-board.desk .rank-mini .rank-row { grid-template-columns: 1.6em minmax(0, 1fr) auto auto 3.2em; gap: 5px; font-size: 12px; }
+  .rank-board.desk .rank-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rank-board.desk .rank-meta { font-size: 10px; }
+  .rank-board.desk .rb-me { font-size: 11px; }
+}
+
+/* 次のランキング更新までの残り時間（ランキングの見出しのすぐ横） */
+.rb-next { margin-left: 6px; font-size: 11px; color: #9fd0ff; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ---------- 名前を決めるダイアログ ---------- */
+#nameDlg { z-index: 85; }
+.name-dlg-note { font-size: 13px; line-height: 1.7; margin: 0 0 10px; color: var(--muted); }
+#nameDlgInput {
+  width: 100%; box-sizing: border-box; margin-bottom: 4px;
+  background: #0a0812; color: var(--text); border: 2px solid var(--line);
+  font-family: inherit; font-size: 16px; padding: 6px 8px;
+}
+#nameDlg .confirm-btns .btn { min-width: 0; flex: 1; }
+.rank-joined { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; margin: 6px 0; }
+.rank-joined.hidden { display: none; }

@@ -86,3 +86,32 @@ npx wrangler d1 execute shinrei-ranking --remote --command="DELETE FROM scores; 
 4. ゲームを GitHub Pages に公開する（`index.html` の `?v=` も上げる）
 
 プレイヤーが新しい版を開くと、その時点の総獲得フィルムが新しいシーズンの出発点になり、そこから増えた分がスコアになります。
+
+## チャットと、意見・不具合の報告
+
+同じサーバー（このワーカー）で、ゲーム内のチャットと開発者への意見・不具合の報告も受け付けています。
+初めて使うとき・テーブルを足したときは、`schema.sql` を本番のデータベースに流してください（`CREATE TABLE IF NOT EXISTS` なので、今のデータは消えません）。
+
+```bash
+npx wrangler d1 execute shinrei-ranking --remote --file=schema.sql
+```
+
+### 届いた意見・不具合の報告を読む
+
+```bash
+npx wrangler d1 execute shinrei-ranking --remote --command="SELECT no, datetime(at/1000,'unixepoch','+9 hours') AS 日時, kind, name, version, text FROM feedback ORDER BY no DESC LIMIT 20"
+```
+
+Cloudflare のダッシュボード（D1 → shinrei-ranking → feedback）からも読めます。
+
+### チャットの書き込みを消す
+
+- チャットは1回80文字まで、同じ人・同じ IP から5秒に1回まで。ひどい言葉・URL・メールアドレス・電話番号のような数字は、サーバーで伏せ字（＊）にします（`src/index.js` の `NG_WORDS`）
+- 7日たった書き込みと、新しい500件より古い書き込みは自動で消えます
+- 困った書き込みは、番号（no）を確かめてから消せます。同じ人の書き込みをまとめて消すこともできます
+
+```bash
+npx wrangler d1 execute shinrei-ranking --remote --command="SELECT no, name, text, pid FROM chat ORDER BY no DESC LIMIT 30"
+npx wrangler d1 execute shinrei-ranking --remote --command="DELETE FROM chat WHERE no = 番号"
+npx wrangler d1 execute shinrei-ranking --remote --command="DELETE FROM chat WHERE pid = 'その人のpid'"
+```

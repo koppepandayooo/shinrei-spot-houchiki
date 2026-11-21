@@ -13,9 +13,21 @@
  *   ・番号は「大.中.小」の形で、数字として比べます（1.10.0 は 1.9.0 より新しい）
  * ========================================================= */
 
-const GAME_VERSION = '1.2.1';
+const GAME_VERSION = '1.3.0';
 
 const UPDATES = [
+  {
+    version: '1.3.0',
+    date: '2026-11-22',
+    items: [
+      'チャットを追加しました（ランキングの横、スマホではランキングの下）。書き込むには名前を決める必要があります',
+      '画面に出すランキングは上位5人にしました（「TOP50」から全体を見られます）',
+      'ランキングは毎時0分・30分に全員そろって更新されるようになりました。見出しの横に、次の更新までの残り時間が出ます',
+      '原付がLv28から先、上げても探索が速くならなかった不具合を直しました。最大のLv40まで速くなります',
+      '設定画面から、開発者に意見・不具合を送れるようになりました',
+      '名前は設定画面で決めるようになりました（ランキングとチャットで共通）。初めて遊ぶときにも名前を聞きます',
+    ],
+  },
   {
     version: '1.2.1',
     date: '2026-11-22',
@@ -100,17 +112,26 @@ function unseenUpdates() {
  */
 function checkUpdateInfo(hadSave) {
   const seen = seenVersion();
-  if (!seen && !hadSave) {
+  // 閉じたら「見た」と記録し、初めて遊ぶ人にはそのあと名前を聞く
+  const done = () => {
     markVersionSeen();
+    if (typeof askNameIfNew === 'function') askNameIfNew();
+  };
+  if (!seen && !hadSave) {
+    // 初めて遊ぶ人：いまのバージョンの内容だけを出す
+    const cur = UPDATES.filter((u) => u.version === GAME_VERSION);
+    if (cur.length) showModal(`ようこそ！（ver ${GAME_VERSION}）`, updatesHtml(cur), 'はじめる', done);
+    else done();
     return;
   }
   const list = unseenUpdates();
   if (!list.length) {
     if (seen !== GAME_VERSION) markVersionSeen();
+    if (typeof askNameIfNew === 'function') askNameIfNew(); // 名前を決めずにページを閉じた人にも、もう一度
     return;
   }
   // 閉じたときに「見た」と記録する（閉じずにページを離れた場合は、次回また表示）
-  showModal('アップデート情報', updatesHtml(list), '閉じる', markVersionSeen);
+  showModal('アップデート情報', updatesHtml(list), '閉じる', done);
 }
 
 // 設定画面：バージョンの表示と「アップデート情報を見る」

@@ -19,7 +19,8 @@ function defaultState() {
     daily: { last: '', streak: 0, best: 0 }, // デイリーボーナス
     vol: { sfx: 0.7, amb: 0.7 }, // 音量
     playerId: '', // ランキング用のID（端末ごと）
-    playerName: '', // ランキングに出す名前
+    playerName: '', // ランキング・チャットに出す名前（設定で決める）
+    nameAsked: false, // 初めて遊ぶときに「名前を決めよう」を出したか
     rankSeason: 0, // どのランキングシーズンのスコアか
     rankEarned: 0, // そのシーズンに獲得したフィルム（ランキングのスコア）
     ranked: false,
@@ -107,6 +108,8 @@ function normalize(d) {
   }
   s.bestRunScore = Math.max(0, +s.bestRunScore || 0);
   s.firstBonus = s.firstBonus && typeof s.firstBonus === 'object' ? s.firstBonus : {};
+  // 名前を聞く機能より前から遊んでいる人には、名前を聞くダイアログを出さない
+  if (d.nameAsked == null) s.nameAsked = true;
   // ランキングのスコア（シーズン中に獲得したフィルム）
   if (typeof RANK_SEASON !== 'undefined' && s.rankSeason !== RANK_SEASON) {
     // ランキングがリセットされたら0から
@@ -202,7 +205,9 @@ function importCode(code) {
 const milestone = (lv) => Math.pow(2, Math.floor(lv / BALANCE.milestoneEvery)); // 一定レベルごとに効果2倍
 const flashMult = (lv = S.lv.flash) => (1 + 0.5 * lv) * milestone(lv);
 const cameraMult = (lv = S.lv.camera) => (1 + lv) * milestone(lv);
-const exploreDur = (lv = S.lv.moped) => Math.max(0.5, 4 / (1 + 0.25 * lv));
+// 探索1回にかかる秒数。原付の最大レベル（Lv40）まで、レベルを上げるたびに必ず短くなる
+// （以前は0.5秒で頭打ちになり、Lv28〜40は効果がなかった）
+const exploreDur = (lv = S.lv.moped) => 4 / (1 + 0.25 * Math.min(lv, 40));
 // すべての収入にかかる倍率（霊感＋赤外線カメラ）
 const reikanMult = (pts = S.reikan) => 1 + REBIRTH.bonusPerPoint * pts;
 const irMult = (lv = S.lv.ir) => 1 + 0.25 * lv;
@@ -1319,6 +1324,7 @@ function start() {
   safe('足音', setupStepEvent);
   safe('時刻と天気', () => setupRealWorld());
   safe('バージョン', () => setupVersionInfo());
+  safe('チャット', () => setupChat());
   safe('タブ', setupTabs);
   // 実績機能より前のセーブは、達成済みの実績を通知なしで記録する
   checkAchievements(!S.achInit);

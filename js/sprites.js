@@ -808,6 +808,18 @@ ICONS.gear = [
   '.o.offo.o.',
   '....oo....',
 ];
+ICONS.chat = [
+  '.oooooooo.',
+  'offffffffo',
+  'offffffffo',
+  'ofcffcffco',
+  'offffffffo',
+  'offffffffo',
+  '.oooooooo.',
+  '..ofo.....',
+  '..oo......',
+  '..o.......',
+];
 ICONS.trophy = [
   '.oooooooo.',
   'oyyyyyyyyo',

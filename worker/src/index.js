@@ -4,6 +4,9 @@
  *   GET  /api/ranking?limit=50&id=<playerId>  … 上位のランキング（id を付けると自分の順位も返す）
  *   POST /api/score                           … スコアを送信（同じ id は最高記録だけ残す）
  *   POST /api/delete                          … 自分の記録を削除（ゲームのデータ削除のとき）
+ *   GET  /api/chat?after=<番号>               … チャットの最新の書き込み（after より新しいものだけ）
+ *   POST /api/chat                            … チャットに書き込む
+ *   POST /api/feedback                        … 開発者への意見・不具合報告を送る（読むのは開発者だけ）
  *
  * ログインなしの「名前を入力するだけ」方式なので、スコアは自己申告です。
  * 入力チェック・送信間隔の制限（id ごと・IP ごと）で、いたずらをある程度防ぎます。
@@ -34,6 +37,17 @@ export default {
       if (url.pathname === '/api/delete' && request.method === 'POST') {
         if (!cors) return json({ error: 'origin_not_allowed' }, 403, null);
         return await deleteScore(request, env, cors);
+      }
+      if (url.pathname === '/api/chat' && request.method === 'GET') {
+        return await getChat(url, env, cors);
+      }
+      if (url.pathname === '/api/chat' && request.method === 'POST') {
+        if (!cors) return json({ error: 'origin_not_allowed' }, 403, null);
+        return await postChat(request, env, cors);
+      }
+      if (url.pathname === '/api/feedback' && request.method === 'POST') {
+        if (!cors) return json({ error: 'origin_not_allowed' }, 403, null);
+        return await postFeedback(request, env, cors);
       }
       return json({ error: 'not_found' }, 404, cors);
     } catch (e) {
@@ -198,4 +212,139 @@ function clampInt(v, min, max) {
 async function sha256Hex(text) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/* ================= チャット ================= */
+const CHAT_MAX = 80; // 1回の書き込みの文字数
+const CHAT_INTERVAL_MS = 5_000; // 同じ人・同じ IP からの書き込みは5秒に1回まで
+const CHAT_KEEP_MS = 7 * 24 * 3600 * 1000; // 7日たった書き込みは消す
+const CHAT_KEEP_ROWS = 500; // 残すのは新しい500件まで
+const CHAT_LIST = 50; // 一度に返す件数
+// 伏せ字にする言葉（ひどい言葉・連絡先の交換につながりやすい言葉）
+const NG_WORDS = [
+  '死ね', 'しね', 'シネ', '殺す', 'ころす', 'コロス', '消えろ', 'きえろ', '殺害',
+  'うざい', 'ウザい', 'ウザイ', 'きもい', 'キモい', 'キモイ', 'ブス', 'ぶす', 'クズ', 'くず', 'カス', 'ゴミが',
+  'ばか', 'バカ', '馬鹿', 'あほ', 'アホ', 'ちんこ', 'ちんぽ', 'まんこ', 'セックス', 'sex', 'fuck', 'shit',
+  'line交換', 'ライン交換', 'lineid', 'ラインid', 'カカオ', 'インスタ教えて', '電話番号', '住所教えて',
+];
+
+function cleanText(s, max) {
+  return Array.from(
+    String(s || '')
+      .replace(/[\u0000-\u001f\u007f<>]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+  )
+    .slice(0, max)
+    .join('');
+}
+// URL・メールアドレス・長い数字（電話番号など）と、NG ワードを伏せ字にする
+function maskText(s) {
+  let t = s
+    .replace(/(https?:\/\/|www\.)\S+/gi, '＊＊＊')
+    .replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, '＊＊＊')
+    .replace(/[0-9０-９][0-9０-９\-ー－ ]{8,}[0-9０-９]/g, '＊＊＊');
+  const low = t.toLowerCase();
+  for (const w of NG_WORDS) {
+    let i = low.indexOf(w.toLowerCase());
+    while (i >= 0) {
+      t = t.slice(0, i) + '＊'.repeat(w.length) + t.slice(i + w.length);
+      i = t.toLowerCase().indexOf(w.toLowerCase(), i + w.length);
+    }
+  }
+  return t;
+}
+// 送信間隔の制限（keys のどれかが ms 以内に使われていたら true）
+async function rateLimited(env, keys, ms, now) {
+  const marks = keys.map(() => '?').join(', ');
+  const row = await env.DB.prepare(`SELECT COUNT(*) AS n FROM rate WHERE key IN (${marks}) AND at > ?`)
+    .bind(...keys, now - ms)
+    .first();
+  return !!(row && row.n > 0);
+}
+const rateMark = (env, key, now) =>
+  env.DB.prepare('INSERT INTO rate (key, at) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET at = excluded.at').bind(key, now);
+async function ipHash(request, env) {
+  return (await sha256Hex((request.headers.get('CF-Connecting-IP') || 'unknown') + (env.IP_SALT || ''))).slice(0, 24);
+}
+
+async function getChat(url, env, cors) {
+  const after = Math.max(0, parseInt(url.searchParams.get('after') || '0', 10) || 0);
+  const { results } = await env.DB.prepare('SELECT no, name, text, at FROM chat WHERE no > ? ORDER BY no DESC LIMIT ?')
+    .bind(after, CHAT_LIST)
+    .all();
+  // 古い順にして返す（プレイヤーの id は返さない）
+  return json({ messages: (results || []).reverse() }, 200, cors);
+}
+
+async function postChat(request, env, cors) {
+  const text0 = await request.text();
+  if (text0.length > MAX_BODY) return json({ error: 'too_large' }, 413, cors);
+  let body;
+  try {
+    body = JSON.parse(text0);
+  } catch {
+    return json({ error: 'bad_json' }, 400, cors);
+  }
+  const id = String(body.id || '');
+  if (!ID_RE.test(id)) return json({ error: 'bad_id' }, 400, cors);
+  const name = cleanName(body.name);
+  if (!name) return json({ error: 'bad_name' }, 400, cors);
+  const text = maskText(cleanText(body.text, CHAT_MAX));
+  if (!text) return json({ error: 'empty' }, 400, cors);
+
+  const now = Date.now();
+  const idKey = 'chat-id:' + id;
+  const ipKey = 'chat-ip:' + (await ipHash(request, env));
+  if (await rateLimited(env, [idKey, ipKey], CHAT_INTERVAL_MS, now)) {
+    return json({ error: 'too_many_requests' }, 429, cors, { 'Retry-After': '5' });
+  }
+  await env.DB.batch([
+    env.DB.prepare('INSERT INTO chat (pid, name, text, at) VALUES (?, ?, ?, ?)').bind(id, name, text, now),
+    rateMark(env, idKey, now),
+    rateMark(env, ipKey, now),
+    // 古い書き込みの片付け
+    env.DB.prepare('DELETE FROM chat WHERE at < ?').bind(now - CHAT_KEEP_MS),
+    env.DB.prepare('DELETE FROM chat WHERE no <= (SELECT no FROM chat ORDER BY no DESC LIMIT 1 OFFSET ?)').bind(CHAT_KEEP_ROWS),
+  ]);
+  return json({ ok: true }, 200, cors);
+}
+
+/* ================= 意見・不具合報告（開発者だけが読む） ================= */
+const FEEDBACK_MAX = 1000;
+const FEEDBACK_INTERVAL_MS = 60_000; // 同じ人・同じ IP からは1分に1回まで
+const FEEDBACK_KINDS = ['要望', '不具合', '感想', 'その他'];
+
+async function postFeedback(request, env, cors) {
+  const text0 = await request.text();
+  if (text0.length > 8192) return json({ error: 'too_large' }, 413, cors);
+  let body;
+  try {
+    body = JSON.parse(text0);
+  } catch {
+    return json({ error: 'bad_json' }, 400, cors);
+  }
+  const id = String(body.id || '');
+  if (!ID_RE.test(id)) return json({ error: 'bad_id' }, 400, cors);
+  const kind = FEEDBACK_KINDS.includes(body.kind) ? body.kind : 'その他';
+  const text = Array.from(String(body.text || '').replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, '').trim())
+    .slice(0, FEEDBACK_MAX)
+    .join('');
+  if (!text) return json({ error: 'empty' }, 400, cors);
+  const name = cleanName(body.name) || '';
+  const version = String(body.version || '').slice(0, 20);
+
+  const now = Date.now();
+  const idKey = 'fb-id:' + id;
+  const ipKey = 'fb-ip:' + (await ipHash(request, env));
+  if (await rateLimited(env, [idKey, ipKey], FEEDBACK_INTERVAL_MS, now)) {
+    return json({ error: 'too_many_requests' }, 429, cors, { 'Retry-After': '60' });
+  }
+  await env.DB.batch([
+    env.DB.prepare('INSERT INTO feedback (pid, name, kind, text, version, at) VALUES (?, ?, ?, ?, ?, ?)').bind(id, name, kind, text, version, now),
+    rateMark(env, idKey, now),
+    rateMark(env, ipKey, now),
+  ]);
+  console.log(JSON.stringify({ message: 'feedback received', kind }));
+  return json({ ok: true }, 200, cors);
 }

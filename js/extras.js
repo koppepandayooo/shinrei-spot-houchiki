@@ -337,7 +337,7 @@ function setupSheets() {
 
 /* ---------- オンラインランキング（Cloudflare Workers に送る） ----------
  * 名前を一度登録すれば、あとは自動で送信する：
- *  - プレイしている間、30分ごと
+ *  - プレイしている間、毎時0分・30分の少し前（全員そろって0分・30分に一覧が切り替わる）
  *  - スポットを移動したとき（新しいスポットを解放したときも）
  *  - ランキングを開いたとき・「更新」を押したとき
  *  - 転生したとき
@@ -349,9 +349,23 @@ let rankLastScore = -1; // 最後に送ったスコア
 let rankLastSpot = 0; // 最後に送った到達スポット
 let rankLastAt = 0; // 最後に送った時刻
 let rankTimer = null; // 後で送る予約
-let rankNextAt = 0; // 次の自動送信の予定時刻
+let rankMissed = false; // 裏にいる間に、一覧の更新時刻が来たか
+let rankSendAt = 0; // 次の自動送信の予定時刻
+let rankLoadAt = 0; // 次に一覧を読み直す時刻（全員同じ）
 const RANK_MIN_GAP = 25 * 1000; // サーバーの制限（20秒）より少し長く
-const RANK_AUTO_EVERY = 30 * 60 * 1000; // プレイ中の自動送信の間隔
+const RANK_AUTO_EVERY = 30 * 60 * 1000; // ランキングの更新の間隔
+/* ランキングの更新は、全員そろって時計の「毎時0分・30分」に行う。
+ *  ・その1分前〜10秒前のあいだに、各自がスコアを送る（同時に集中しないよう、送る秒は人ごとにばらす）
+ *  ・ちょうど0分・30分（の数秒後）に、全員が一覧を読み直す
+ *  → だれの画面でも、同じ時刻に同じランキングに切り替わる */
+const rankSlot = (t = Date.now()) => Math.ceil((t + 1) / RANK_AUTO_EVERY) * RANK_AUTO_EVERY; // 次の更新時刻
+const RANK_SEND_JITTER = 50 * 1000;
+function scheduleRank() {
+  const slot = rankSlot();
+  rankLoadAt = slot + 3000;
+  rankSendAt = slot - 60 * 1000 + Math.floor(Math.random() * RANK_SEND_JITTER);
+  if (rankSendAt <= Date.now()) rankSendAt = Date.now() + 1000;
+}
 // ランキングに出すスポット：これまでに到達した一番奥（転生して最初に戻っても下がらない）
 // 1〜7＝通常スポット（弱い順）、8＝隠しスポット。サーバーも、同じ人の記録は一番奥のものを残す
 const reachedSpotNo = () => (S.secretSeen || S.secretOpen ? STAGES.length : Math.max(S.unlocked, S.bestUnlocked || 1));
@@ -405,42 +419,115 @@ function scorePayload() {
     photos: S.ghosts,
   });
 }
-function updateRankUI(editing) {
-  const joined = !!S.playerName && !editing;
-  $('#rankForm').classList.toggle('hidden', joined);
-  $('#rankJoined').classList.toggle('hidden', !joined);
-  $('#rankHead').textContent = joined ? 'ランキングに参加中' : S.playerName ? '名前を変更' : '名前を登録して参加';
-  $('#rankNote').textContent = joined
-    ? 'スコアは、ランキングのリセット後に獲得したフィルムです。'
-    : 'スコアは、ランキングのリセット後に獲得したフィルムです。名前を登録すると参加できます（12文字まで・ログイン不要）。';
-  $('#rankMeName').textContent = S.playerName;
-  $('#rankSend').textContent = S.playerName ? '変更' : '登録';
+function updateRankUI() {
+  const joined = !!S.playerName;
+  $('#rankHead').textContent = joined ? 'ランキングに参加中' : 'ランキング';
+  $('#rankWho').textContent = joined ? `「${S.playerName}」として参加中` : 'まだ名前が決まっていません。名前を決めると参加できます。';
+  $('#rankToName').textContent = joined ? '名前を変える' : '名前を決める';
+  if ($('#setName') && document.activeElement !== $('#setName')) $('#setName').value = S.playerName;
   refreshBoardButtons();
-  if (!joined) $('#rankName').value = S.playerName;
+}
+// 設定画面の「名前」を開く（ランキング・チャットの「名前を決める」から）
+function openNameSetting() {
+  refreshUI(true);
+  openSheet('settingsPanel');
+  $('#setName').value = S.playerName;
+  $('#setNameMsg').textContent = '';
+  $('#nameCard').scrollIntoView({ block: 'start' });
+  setTimeout(() => $('#setName').focus(), 50);
+}
+/**
+ * 名前を決める・変える（設定画面と、初めて遊ぶ人のダイアログから）
+ * 名前を決めると、ランキングにすぐ送る（自動で参加）。うまくいけば true
+ */
+async function setPlayerName(raw, msgEl) {
+  const name = cleanName(raw);
+  if (!name) {
+    if (msgEl) {
+      msgEl.textContent = '名前を入力してください（12文字まで）。';
+      msgEl.className = 'code-msg ng';
+    }
+    return false;
+  }
+  S.playerName = name;
+  S.nameAsked = true;
+  save();
+  updateRankUI();
+  if (typeof refreshChatForm === 'function') refreshChatForm(); // チャットも書き込めるように
+  if (msgEl) {
+    msgEl.textContent = `「${name}」にしました。`;
+    msgEl.className = 'code-msg ok';
+  }
+  if (RANKING_API) {
+    rankLastAt = 0; // 名前の変更はすぐ送る
+    submitScore(true).then(loadBoard);
+  }
+  return true;
+}
+function setupNameSetting() {
+  const save = () => setPlayerName($('#setName').value, $('#setNameMsg'));
+  $('#setNameSave').addEventListener('click', save);
+  $('#setName').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.isComposing) save();
+  });
+  $('#setName').value = S.playerName;
+  $('#rankToName').addEventListener('click', openNameSetting);
+}
+/* 初めて遊ぶ人：アップデート情報（バージョン）のあとに、名前を決めるダイアログを出す。
+ * 「名前なしで始める」も選べる（あとから設定で決められる） */
+function askNameIfNew() {
+  if (S.nameAsked || S.playerName) return;
+  const dlg = $('#nameDlg');
+  const input = $('#nameDlgInput');
+  const msg = $('#nameDlgMsg');
+  const close = () => {
+    S.nameAsked = true;
+    save();
+    dlg.classList.add('hidden');
+  };
+  const ok = async () => {
+    if (await setPlayerName(input.value, msg)) close();
+  };
+  $('#nameDlgOk').onclick = ok;
+  $('#nameDlgSkip').onclick = close;
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter' && !e.isComposing) ok();
+  };
+  msg.textContent = '';
+  input.value = '';
+  dlg.classList.remove('hidden');
+  setTimeout(() => input.focus(), 50);
 }
 function setupRanking() {
   const enabled = !!RANKING_API;
   $('#rankOff').classList.toggle('hidden', enabled);
   $('#rankOn').classList.toggle('hidden', !enabled);
-  updateRankUI(false);
+  setupNameSetting();
+  updateRankUI();
   if (!enabled) return;
-  $('#rankSend').addEventListener('click', registerName);
-  $('#rankName').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') registerName();
-  });
-  $('#rankRename').addEventListener('click', () => {
-    updateRankUI(true);
-    $('#rankName').focus();
-  });
   setupBoard();
-  // プレイしている間は30分ごとに自動送信（画面が見えているときだけ）。
-  // 次の送信時刻は、最後に送った時刻から30分後（スポット移動などで送ったら、そこから数え直す）
-  rankNextAt = Date.now() + RANK_AUTO_EVERY;
+  // 毎時0分・30分の更新（送信は画面が見えているときだけ）
+  scheduleRank();
+  let sentForSlot = false;
   setInterval(() => {
-    if (document.hidden || Date.now() < rankNextAt) return;
-    rankNextAt = Date.now() + RANK_AUTO_EVERY;
-    if (rankDirty()) queueSubmit();
+    const now = Date.now();
+    if (!sentForSlot && now >= rankSendAt) {
+      sentForSlot = true;
+      if (!document.hidden && rankDirty()) queueSubmit();
+    }
+    if (now >= rankLoadAt) {
+      if (!document.hidden) loadBoard();
+      else rankMissed = true; // 裏にいる間の更新は、戻ってきたときに読み直す
+      scheduleRank();
+      sentForSlot = false;
+    }
   }, 1000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && rankMissed) {
+      rankMissed = false;
+      loadBoard();
+    }
+  });
   // ゲームを閉じる・裏に回すときにも送る（ページが閉じても届く sendBeacon を使う）
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) beaconSubmit();
@@ -455,19 +542,6 @@ function cleanName(s) {
   )
     .slice(0, 12)
     .join('');
-}
-async function registerName() {
-  const name = cleanName($('#rankName').value);
-  if (!name) {
-    rankMsg('名前を入力してください（12文字まで）。', false);
-    return;
-  }
-  S.playerName = name;
-  save();
-  updateRankUI(false);
-  rankLastAt = 0; // 名前の変更はすぐ送る
-  await submitScore(true);
-  await loadRanking();
 }
 // スコアか到達スポットが変わっていれば送る（間隔が短すぎるときは、あとで送る予約をする）
 function autoSubmit() {
@@ -518,14 +592,15 @@ async function submitScore(manual) {
       rankLastScore = score;
       rankLastSpot = spot;
       rankLastAt = Date.now();
-      rankNextAt = rankLastAt + RANK_AUTO_EVERY;
       if (!S.ranked) {
         S.ranked = true;
         checkAchievements();
         save();
       }
-      if (manual) rankMsg(`登録しました！ いまの順位：${data.rank}位`, true);
-      loadBoard();
+      if (manual) {
+        rankMsg(`登録しました！ いまの順位：${data.rank}位`, true);
+        loadBoard();
+      }
       // 送っている間にさらに変わっていたら（スポットを続けて移動したときなど）、あとでもう一度
       if (rankDirty()) queueSubmit();
     } else if (status === 429) {
@@ -543,7 +618,7 @@ async function submitScore(manual) {
 }
 async function openRanking() {
   openSheet('rankPanel');
-  updateRankUI(false);
+  updateRankUI();
   if (!RANKING_API) return;
   $('#rankMsg').textContent = '';
   // 参加中なら、最新のスコアを送ってからランキングを表示
@@ -599,10 +674,10 @@ async function deleteRankingEntry(id) {
     return false;
   }
 }
-// 常に表示するランキング（上位10人と自分の順位）
+// 常に表示するランキング（上位5人と自分の順位）
 // 参加者が少ないうちは、PCでは1行の細い帯にする
 function renderBoard(data) {
-  document.querySelectorAll('.rb-list').forEach((el) => renderRankRows(el, data.entries.slice(0, 10)));
+  document.querySelectorAll('.rb-list').forEach((el) => renderRankRows(el, data.entries.slice(0, 5)));
   const me = data.me ? `${S.playerName || 'あなた'}：${data.me.rank}位` : S.playerName ? '' : '未参加';
   document.querySelectorAll('.rb-me').forEach((el) => (el.textContent = me));
 }
@@ -613,7 +688,7 @@ async function loadBoard() {
   if (!RANKING_API) return;
   refreshBoardButtons();
   try {
-    const { status, data } = await rankFetch('/api/ranking?limit=10&id=' + encodeURIComponent(ensurePlayerId()));
+    const { status, data } = await rankFetch('/api/ranking?limit=5&id=' + encodeURIComponent(ensurePlayerId()));
     if (status !== 200 || !Array.isArray(data.entries)) throw new Error(String(status));
     renderBoard(data);
   } catch (e) {
@@ -625,11 +700,7 @@ function setupBoard() {
   document.querySelectorAll('.rank-board').forEach((b) => b.classList.remove('hidden'));
   document.querySelectorAll('.rb-ico').forEach((i) => (i.src = Sprites.iconURL('trophy')));
   document.querySelectorAll('.rb-open').forEach((b) => b.addEventListener('click', openRanking));
-  loadBoard();
-  // 30秒ごとに一覧を読み直す（画面が見えているときだけ）
-  setInterval(() => {
-    if (!document.hidden) loadBoard();
-  }, 30 * 1000);
+  loadBoard(); // 一覧は起動したときと、毎時0分・30分に全員そろって読み直す
 }
 async function loadRanking() {
   if (!RANKING_API) return;
@@ -646,12 +717,14 @@ async function loadRanking() {
   }
 }
 
-// 次の自動送信までの残り時間（ランキング画面に表示）
+// 次のランキング更新（毎時0分・30分）までの残り時間。「12:34」の形
+function rankCountdown() {
+  const left = Math.max(0, Math.ceil((rankSlot() - Date.now()) / 1000));
+  return `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+}
 function rankNextText() {
-  if (!RANKING_API || !S.playerName) return '';
-  const left = Math.max(0, rankNextAt - Date.now());
-  if (rankBusy || left < 60 * 1000) return 'まもなくランキングに送信します';
-  return `あと${Math.ceil(left / 60000)}分でランキングに送信します`;
+  if (!RANKING_API) return '';
+  return `次のランキング更新まで ${rankCountdown()}（全員そろって毎時0分・30分に更新されます）`;
 }
 
 /* ---------- 定期的な表示更新 ---------- */
@@ -661,4 +734,5 @@ setInterval(() => {
   refreshRebirth();
   if ($('#rankScore')) $('#rankScore').textContent = fmt(rankScore());
   if ($('#rankNext')) $('#rankNext').textContent = rankNextText();
+  document.querySelectorAll('.rb-next').forEach((el) => (el.textContent = RANKING_API ? `更新まで ${rankCountdown()}` : ''));
 }, 400);
