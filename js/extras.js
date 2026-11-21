@@ -73,7 +73,7 @@ function refreshCompanions() {
     // 画面と同じく、進む向き（右）を向かせる
     e.img.style.transform = pic && (c.id === 'cat' || c.id === 'vet') ? 'scaleX(-1)' : '';
     e.name.textContent = locked ? '？？？' : c.name;
-    e.desc.textContent = locked ? `「${STAGES[c.req - 1].name}」で出会えるかもしれない…` : c.desc;
+    e.desc.textContent = locked ? `「${spotLabel(S, c.req - 1)}」で出会えるかもしれない…` : c.desc;
     e.eff.textContent = locked ? '' : compEffect(c);
     e.lv.textContent = lv > 0 ? `なかよし度 Lv${lv}${lv >= c.max ? '（最大）' : ''}` : locked ? '' : 'まだ仲間ではない';
     if (locked) {
@@ -160,7 +160,7 @@ function buildRebirth() {
   box.innerHTML = `
     <h3>転生（お祓いを受けて出直す）</h3>
     <p class="note">フィルム・装備・解放したスポットが最初に戻るかわりに、<b>霊感</b>を得ます。霊感1につき、すべての収入が+10%（ずっと残ります）。仲間・心霊写真・実績は残ります。</p>
-    <p class="note">霊感は「1周で稼いだフィルム」の<b>最高記録を更新した分</b>だけ増えます。奥まで進んでたくさん稼いでから転生するほどお得です。初めて旧吹上隧道・八王子城跡まで行って転生したときは、踏破ボーナスもあります。</p>
+    <p class="note">霊感は「1周で稼いだフィルム」の<b>最高記録を更新した分</b>だけ増えます。奥まで進んでたくさん稼いでから転生するほどお得です。初めて奥のスポットまで行って転生したときは、踏破ボーナスもあります。</p>
     <dl class="rebirth-stats">
       <dt>いまの霊感</dt><dd id="rbNow">0</dd>
       <dt>今回の記録／最高記録</dt><dd id="rbScore">0 / 0</dd>
@@ -186,7 +186,7 @@ function refreshRebirth() {
   $('#rbBtn').classList.toggle('affordable', ok);
   $('#rbReq').textContent =
     S.unlocked < REBIRTH.minSpots
-      ? `「${STAGES[REBIRTH.minSpots - 1].name}」を解放すると転生できるようになります。`
+      ? `「${spotLabel(S, REBIRTH.minSpots - 1)}」を解放すると転生できるようになります。`
       : `最高記録を+1更新するまで：あと ${fmt(Math.max(0, rebirthNeed(Math.max(cur, S.bestRunScore) + 1) - S.runTotal))} フィルム`;
 }
 async function doRebirth() {
@@ -305,6 +305,35 @@ function checkDaily() {
   save();
 }
 
+// デイリーボーナスの様子を見る（ヘッダーのボタン）。今日まだ受け取っていなければ、そのまま受け取る
+function openDaily() {
+  if (S.daily.last !== dateKey(new Date())) {
+    checkDaily();
+    return;
+  }
+  const idx = (S.daily.streak - 1) % DAILY.length; // 今日が何日目か（0から）
+  const nextIdx = S.daily.streak % DAILY.length; // 明日
+  const next = DAILY[nextIdx];
+  const nextAmount = Math.max(ratePerSec() * next.min * 60, clickReward() * 20 * (nextIdx + 1), 50 * (nextIdx + 1));
+  // 7日目を受け取った日は、明日から1日目に戻る（一覧も新しい週として出す）
+  const newWeek = nextIdx === 0;
+  const cells = DAILY.map((d, i) => {
+    const got = !newWeek && i <= idx;
+    const cls = got ? 'got' : i === nextIdx ? 'today' : '';
+    const mark = got ? '<br>✓' : i === nextIdx ? '<br>明日' : '<br>　';
+    return `<span class="daily-cell ${cls} ${d.reikan ? 'big' : ''}">${i + 1}日目${mark}</span>`;
+  }).join('');
+  showModal(
+    'デイリーボーナス',
+    `<div class="daily-row">${cells}</div>` +
+      `今日の分は受け取り済みです（連続 <b>${S.daily.streak}</b> 日目・最高 ${S.daily.best || S.daily.streak} 日）。<br>` +
+      `明日（${nextIdx + 1}日目）は <span class="gold">約 ${fmt(nextAmount)} フィルム</span>` +
+      (next.reikan ? `<br><b class="gold">＋ 7日目の特別ボーナス：霊感 +${next.reikan}</b>` : '') +
+      '<br><small>日付が変わったら（この端末の時計で0時）、ゲームを開くと受け取れます。1日あくと1日目に戻ります。</small>',
+    '閉じる'
+  );
+}
+
 /* ---------- 設定・ランキングのパネル（ヘッダーのボタンで開く） ---------- */
 function openSheet(id) {
   document.querySelectorAll('.sheet').forEach((s) => s.classList.add('hidden'));
@@ -317,12 +346,12 @@ function closeSheets() {
 }
 function setupSheets() {
   $('#icoSettings').src = Sprites.iconURL('gear');
-  $('#icoRank').src = Sprites.iconURL('trophy');
+  $('#icoDaily').src = Sprites.iconURL('calendar');
   $('#btnSettings').addEventListener('click', () => {
     refreshUI(true);
     openSheet('settingsPanel');
   });
-  $('#btnRank').addEventListener('click', openRanking);
+  $('#btnDaily').addEventListener('click', openDaily); // ランキングは画面の「もっと見る」から開く
   document.querySelectorAll('.sheet').forEach((sheet) => {
     sheet.querySelector('.sheet-close').addEventListener('click', closeSheets);
     // 外側（暗いところ）をタップしても閉じる
@@ -633,8 +662,7 @@ function rankSpotLabel(spot) {
   const i = (spot || 1) - 1;
   const st = STAGES[i];
   if (!st) return '';
-  const known = st.secret ? !!S.secretSeen : i < Math.max(S.unlocked, S.bestUnlocked || 1);
-  return known ? SPOT_SHORT[i] || st.name : '？？？';
+  return spotKnown(S, i) ? SPOT_SHORT[i] || st.name : '？？？';
 }
 function renderRankRows(list, entries) {
   list.innerHTML = '';
@@ -676,13 +704,34 @@ async function deleteRankingEntry(id) {
 }
 // 常に表示するランキング（上位5人と自分の順位）
 // 参加者が少ないうちは、PCでは1行の細い帯にする
+let boardMe = null; // 最後に読み込んだときの自分の順位
 function renderBoard(data) {
   document.querySelectorAll('.rb-list').forEach((el) => renderRankRows(el, data.entries.slice(0, 5)));
-  const me = data.me ? `${S.playerName || 'あなた'}：${data.me.rank}位` : S.playerName ? '' : '未参加';
-  document.querySelectorAll('.rb-me').forEach((el) => (el.textContent = me));
+  boardMe = data.me || null;
+  refreshBoardMe();
+}
+// ランキングの下の行：自分の名前（左）と、いまのスコア・順位（右）
+function refreshBoardMe() {
+  if (!RANKING_API) return;
+  const name = S.playerName ? S.playerName : '名前なし（未参加）';
+  const rank = S.playerName && boardMe ? `・${boardMe.rank}位` : '';
+  const score = `スコア ${fmt(rankScore())}${rank}`;
+  document.querySelectorAll('.rb-me').forEach((el) => {
+    if (!el.firstChild || el.dataset.v !== name + '|' + score) {
+      el.dataset.v = name + '|' + score;
+      el.innerHTML = '';
+      const n = document.createElement('span');
+      n.className = 'rb-me-name';
+      n.textContent = name;
+      const sc = document.createElement('span');
+      sc.className = 'rb-me-score';
+      sc.textContent = score;
+      el.append(n, sc);
+    }
+  });
 }
 function refreshBoardButtons() {
-  document.querySelectorAll('.rb-open').forEach((b) => (b.textContent = S.playerName ? 'TOP50' : '参加する'));
+  document.querySelectorAll('.rb-open').forEach((b) => (b.textContent = S.playerName ? 'もっと見る' : '参加する')); // 上位50人の一覧を開く
 }
 async function loadBoard() {
   if (!RANKING_API) return;
@@ -733,6 +782,7 @@ setInterval(() => {
   refreshCompanions();
   refreshRebirth();
   if ($('#rankScore')) $('#rankScore').textContent = fmt(rankScore());
+  refreshBoardMe();
   if ($('#rankNext')) $('#rankNext').textContent = rankNextText();
   document.querySelectorAll('.rb-next').forEach((el) => (el.textContent = RANKING_API ? `更新まで ${rankCountdown()}` : ''));
 }, 400);

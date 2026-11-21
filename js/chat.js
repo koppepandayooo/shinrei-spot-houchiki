@@ -10,8 +10,17 @@
  * ========================================================= */
 
 // 新しい書き込みを確かめる間隔（画面が見えているときだけ）。
-// 短くしすぎると、Cloudflare の無料枠（1日10万リクエスト）を使い切りやすい
+// ふだんは20秒ごと。会話が続いている間（新しい書き込みがあった・自分が書き込んだ・入力欄を触った
+// ときから3分間）は5秒ごとにして、やりとりが遅く感じないようにする。
+// ずっと短い間隔にすると、Cloudflare の無料枠（1日10万リクエスト）を使い切りやすい
 const CHAT_POLL = 20 * 1000;
+const CHAT_POLL_FAST = 5 * 1000;
+const CHAT_ACTIVE_MS = 3 * 60 * 1000;
+let chatActiveUntil = 0;
+function chatActive() {
+  chatActiveUntil = Date.now() + CHAT_ACTIVE_MS;
+  chatNextPoll = Math.min(chatNextPoll, Date.now() + CHAT_POLL_FAST);
+}
 let chatLastNo = 0; // 画面に出している最新の書き込みの番号
 let chatBusy = false;
 let chatNextPoll = 0;
@@ -29,8 +38,9 @@ function chatTime(at) {
 function appendChat(messages) {
   const fresh = messages.filter((m) => m.no > chatLastNo);
   if (!fresh.length) return;
+  if (chatLastNo) chatActive(); // 起動直後の読み込み以外で新しい書き込みが来たら、しばらく速く読む
+  // 一覧は下から上へ積む（CSS の column-reverse）。いちばん新しい書き込みが、いつも一番下に見える
   document.querySelectorAll('.cb-list').forEach((list) => {
-    const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 40;
     if (list.querySelector('.chat-empty')) list.innerHTML = '';
     for (const m of fresh) {
       const li = document.createElement('li');
@@ -48,11 +58,10 @@ function appendChat(messages) {
       tx.className = 'chat-text';
       tx.textContent = m.text;
       li.append(head, tx);
-      list.appendChild(li);
+      list.insertBefore(li, list.firstChild); // 新しいものほど先頭（＝画面では一番下）
     }
     // 古い行は画面から外す（最新の50件まで）
-    while (list.children.length > 50) list.removeChild(list.firstChild);
-    if (atBottom || !chatLastNo) list.scrollTop = list.scrollHeight;
+    while (list.children.length > 50) list.removeChild(list.lastChild);
   });
   chatLastNo = fresh[fresh.length - 1].no;
 }
@@ -103,6 +112,7 @@ async function sendChat(board) {
     if (status === 200 && data.ok) {
       box.value = '';
       chatMsg(board, '', true);
+      chatActive();
       await loadChat();
     } else if (status === 429) chatMsg(board, '続けて書き込めるのは5秒に1回までです。', false);
     else chatMsg(board, `書き込めませんでした（${data.error || status}）。`, false);
@@ -173,6 +183,11 @@ function setupChat() {
       }
     });
     b.querySelector('.cb-to-rank').addEventListener('click', openNameSetting);
+    // 入力欄を触ったら、すぐ最新を読み、しばらく速く読む
+    b.querySelector('.cb-text').addEventListener('focus', () => {
+      chatActive();
+      loadChat();
+    });
   });
   $('#fbSend').addEventListener('click', sendFeedback);
   refreshChatForm();
@@ -181,7 +196,7 @@ function setupChat() {
   setInterval(() => {
     refreshChatForm();
     if (document.hidden || tabPaused || Date.now() < chatNextPoll) return;
-    chatNextPoll = Date.now() + CHAT_POLL;
+    chatNextPoll = Date.now() + (Date.now() < chatActiveUntil ? CHAT_POLL_FAST : CHAT_POLL);
     loadChat();
   }, 1000);
 }

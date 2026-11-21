@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261122-6">
+  <link rel="stylesheet" href="css/style.css?v=20261122-16">
 </head>
 <body>
   <canvas id="backdrop" aria-hidden="true"></canvas>
@@ -28,7 +28,7 @@
         </div>
         <div class="rates">探索 <b id="rate">0</b>/秒　撮影 <b id="clickVal">1</b>/回</div>
         <div class="top-btns">
-          <button type="button" class="icon-btn" id="btnRank" aria-label="ランキング" title="ランキング"><img id="icoRank" alt=""></button>
+          <button type="button" class="icon-btn" id="btnDaily" aria-label="デイリーボーナス" title="デイリーボーナス"><img id="icoDaily" alt=""></button>
           <button type="button" class="icon-btn" id="btnSettings" aria-label="設定" title="設定"><img id="icoSettings" alt=""></button>
         </div>
       </header>
@@ -65,10 +65,10 @@
       <section class="card rank-board desk hidden" aria-label="ランキング">
         <div class="rank-board-head">
           <h3><img class="icon-s rb-ico" alt="">ランキング<span class="rb-next"></span></h3>
-          <span class="rb-me"></span>
           <button type="button" class="btn small rb-open">参加する</button>
         </div>
         <ol class="rank-list rank-mini rb-list"><li class="rank-empty">読み込み中…</li></ol>
+        <p class="rb-me"></p>
       </section>
       <section class="card chat-board desk hidden" aria-label="チャット">
         <div class="rank-board-head">
@@ -130,10 +130,10 @@
     <section class="card rank-board mob hidden" aria-label="ランキング">
       <div class="rank-board-head">
         <h3><img class="icon-s rb-ico" alt="">ランキング<span class="rb-next"></span></h3>
-        <span class="rb-me"></span>
         <button type="button" class="btn small rb-open">参加する</button>
       </div>
       <ol class="rank-list rank-mini rb-list"><li class="rank-empty">読み込み中…</li></ol>
+        <p class="rb-me"></p>
     </section>
     <section class="card chat-board mob hidden" aria-label="チャット">
         <div class="rank-board-head">
@@ -286,6 +286,11 @@
       </div>
     </div>
   </div>
+  <div class="update-bar hidden" id="updateBar" role="status">
+    <span>新しいバージョンが公開されました。再読み込みすると最新版で遊べます（進み具合は保存されます）。</span>
+    <button type="button" class="btn affordable small" id="updateReload">再読み込み</button>
+    <button type="button" class="btn small" id="updateLater">あとで</button>
+  </div>
   <div class="toast" id="toast"></div>
   <div class="ach-toast" id="achToast" aria-live="polite">
     <span class="ach-badge">🏆 実績解除</span>
@@ -294,17 +299,17 @@
   </div>
 
   <!-- ?v= はキャッシュ対策。ファイルを更新したら index.html の v= の値をすべて新しくする -->
-  <script src="js/config.js?v=20261122-6"></script>
-  <script src="js/data.js?v=20261122-6"></script>
-  <script src="js/sprites.js?v=20261122-6"></script>
-  <script src="js/scene.js?v=20261122-6"></script>
-  <script src="js/sound.js?v=20261122-6"></script>
-  <script src="js/backdrop.js?v=20261122-6"></script>
-  <script src="js/weather.js?v=20261122-6"></script>
-  <script src="js/updates.js?v=20261122-6"></script>
-  <script src="js/game.js?v=20261122-6"></script>
-  <script src="js/extras.js?v=20261122-6"></script>
-  <script src="js/realworld.js?v=20261122-6"></script>
-  <script src="js/chat.js?v=20261122-6"></script>
+  <script src="js/config.js?v=20261122-16"></script>
+  <script src="js/data.js?v=20261122-16"></script>
+  <script src="js/sprites.js?v=20261122-16"></script>
+  <script src="js/scene.js?v=20261122-16"></script>
+  <script src="js/sound.js?v=20261122-16"></script>
+  <script src="js/backdrop.js?v=20261122-16"></script>
+  <script src="js/weather.js?v=20261122-16"></script>
+  <script src="js/updates.js?v=20261122-16"></script>
+  <script src="js/game.js?v=20261122-16"></script>
+  <script src="js/extras.js?v=20261122-16"></script>
+  <script src="js/realworld.js?v=20261122-16"></script>
+  <script src="js/chat.js?v=20261122-16"></script>
 </body>
 </html>

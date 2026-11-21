@@ -247,6 +247,14 @@ const BALANCE = {
 const LINEAR_SPOTS = STAGES.filter((st) => !st.secret).length;
 const stageIndex = (id) => STAGES.findIndex((st) => st.id === id);
 // そのスポットが解放済みか（s = セーブデータ）
+// そのスポットを知っているか（いま解放しているか、転生前に到達したことがある。隠しスポットは一度たどり着いたことがある）
+function spotKnown(s, idx) {
+  const st = STAGES[idx];
+  if (!st) return false;
+  return st.secret ? !!s.secretSeen : idx < Math.max(s.unlocked, s.bestUnlocked || 1);
+}
+// 知らないスポットは「？？？」と書く（ネタバレ防止）
+const spotLabel = (s, idx) => (spotKnown(s, idx) ? STAGES[idx].name : '？？？');
 function spotOpen(s, id) {
   const i = stageIndex(id);
   if (i < 0) return false;
@@ -405,12 +413,12 @@ const ACHIEVEMENTS = [
   { id: 'film1e4', name: '総獲得フィルム10,000', desc: 'フィルムを累計1万枚手に入れる', check: (s) => s.total >= 1e4 },
   { id: 'film1e6', name: '総獲得フィルム100万', desc: 'フィルムを累計100万枚手に入れる', check: (s) => s.total >= 1e6 },
   { id: 'film1e8', name: '総獲得フィルム1億', desc: 'フィルムを累計1億枚手に入れる', check: (s) => s.total >= 1e8 },
-  { id: 'spotRyohoku', name: '夜の大橋', desc: '陵北大橋を解放する', check: (s) => spotOpen(s, 'ryohoku') },
-  { id: 'spotManji', name: '卵形のトンネル', desc: '旧満地トンネルを解放する', check: (s) => spotOpen(s, 'manji') },
-  { id: 'spot2', name: '絹の道の丘へ', desc: '道了堂跡を解放する', check: (s) => spotOpen(s, 'doryodo') },
-  { id: 'spotKomine', name: '小峰峠の闇', desc: '旧小峰トンネルを解放する', check: (s) => spotOpen(s, 'komine') },
-  { id: 'spot4', name: '峠の隧道へ', desc: '旧吹上隧道を解放する', check: (s) => spotOpen(s, 'fukiage') },
-  { id: 'spot3', name: '落城の山へ', desc: '八王子城跡を解放する', check: (s) => spotOpen(s, 'hachioji') },
+  { id: 'spotRyohoku', spot: 'ryohoku', name: '夜の大橋', desc: '陵北大橋を解放する', check: (s) => spotOpen(s, 'ryohoku') },
+  { id: 'spotManji', spot: 'manji', name: '卵形のトンネル', desc: '旧満地トンネルを解放する', check: (s) => spotOpen(s, 'manji') },
+  { id: 'spot2', spot: 'doryodo', name: '絹の道の丘へ', desc: '道了堂跡を解放する', check: (s) => spotOpen(s, 'doryodo') },
+  { id: 'spotKomine', spot: 'komine', name: '小峰峠の闇', desc: '旧小峰トンネルを解放する', check: (s) => spotOpen(s, 'komine') },
+  { id: 'spot4', spot: 'fukiage', name: '峠の隧道へ', desc: '旧吹上隧道を解放する', check: (s) => spotOpen(s, 'fukiage') },
+  { id: 'spot3', spot: 'hachioji', name: '落城の山へ', desc: '八王子城跡を解放する', check: (s) => spotOpen(s, 'hachioji') },
   { id: 'spot5', name: '東京最古の闇', desc: '旧旧吹上隧道にたどり着く', secret: true, check: (s) => !!s.secretSeen },
   { id: 'stepWin', name: '足音に立ち向かう', desc: '足音イベントで撮影に成功する', check: (s) => s.steps.win >= 1 },
   { id: 'stepLose', name: '……誰もいない', desc: '足音イベントで撮影に失敗する', check: (s) => s.steps.lose >= 1 },

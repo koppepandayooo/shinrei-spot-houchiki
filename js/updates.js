@@ -13,15 +13,24 @@
  *   ・番号は「大.中.小」の形で、数字として比べます（1.10.0 は 1.9.0 より新しい）
  * ========================================================= */
 
-const GAME_VERSION = '1.3.0';
+const GAME_VERSION = '1.3.1';
 
 const UPDATES = [
+  {
+    version: '1.3.1',
+    date: '2026-11-22',
+    items: [
+      '遊んでいる間に新しいバージョンが公開されたら、画面の上でお知らせするようにしました（「再読み込み」で最新版になります）',
+      'ランキングの横のボタンを「もっと見る」にしました（上位50人を見られます）',
+      '右上にデイリーボーナスのボタンを置きました（連続日数と明日もらえる量が見られます）。ランキングは画面の「もっと見る」から開けます',
+    ],
+  },
   {
     version: '1.3.0',
     date: '2026-11-22',
     items: [
       'チャットを追加しました（ランキングの横、スマホではランキングの下）。書き込むには名前を決める必要があります',
-      '画面に出すランキングは上位5人にしました（「TOP50」から全体を見られます）',
+      '画面に出すランキングは上位5人にしました（「もっと見る」で上位50人を見られます）',
       'ランキングは毎時0分・30分に全員そろって更新されるようになりました。見出しの横に、次の更新までの残り時間が出ます',
       '原付がLv28から先、上げても探索が速くならなかった不具合を直しました。最大のLv40まで速くなります',
       '設定画面から、開発者に意見・不具合を送れるようになりました',
@@ -144,4 +153,54 @@ function setupVersionInfo() {
       if (typeof closeSheets === 'function') closeSheets();
       showModal('アップデート情報', updatesHtml([...UPDATES].sort((a, b) => compareVersion(b.version, a.version))), '閉じる', markVersionSeen);
     });
+}
+
+/* ---------- 遊んでいる間に新しい版が公開されたら、お知らせして再読み込みしてもらう ----------
+ * 公開中の index.html を5分ごと（画面が見えているときだけ）に読み直し、
+ * そこに書かれた game.js の ?v= の番号が、いま動いている版と違えば画面の上に帯を出す。
+ * 更新のたびに ?v= を上げているので、ここを書き換える必要はない。
+ * ※ GitHub Pages の配信には最大10分ほどのキャッシュがあるので、お知らせは公開の数分〜10分後になることがある */
+const UPDATE_CHECK_EVERY = 5 * 60 * 1000;
+let updateCheckAt = 0;
+let updateFound = false;
+function runningBuild() {
+  const el = document.querySelector('script[src*="js/game.js"]');
+  const m = el && el.getAttribute('src').match(/[?&]v=([\w.-]+)/);
+  return m ? m[1] : null;
+}
+async function checkNewBuild() {
+  if (updateFound) return;
+  const cur = runningBuild();
+  if (!cur) return;
+  try {
+    const res = await fetch(new URL('index.html', location.href).href + '?check=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return;
+    const m = (await res.text()).match(/js\/game\.js\?v=([\w.-]+)/);
+    if (m && m[1] !== cur) {
+      updateFound = true;
+      $('#updateBar').classList.remove('hidden');
+    }
+  } catch (e) {
+    /* 通信できないときは、次の機会に */
+  }
+}
+function setupUpdateCheck() {
+  $('#updateReload').addEventListener('click', () => {
+    if (typeof save === 'function') save(); // 今の進み具合を保存してから
+    location.reload();
+  });
+  $('#updateLater').addEventListener('click', () => $('#updateBar').classList.add('hidden'));
+  updateCheckAt = Date.now() + UPDATE_CHECK_EVERY;
+  setInterval(() => {
+    if (document.hidden || (typeof tabPaused !== 'undefined' && tabPaused) || Date.now() < updateCheckAt) return;
+    updateCheckAt = Date.now() + UPDATE_CHECK_EVERY;
+    checkNewBuild();
+  }, 5000);
+  // しばらく裏にいたあと戻ってきたときにも確かめる
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && Date.now() >= updateCheckAt - UPDATE_CHECK_EVERY + 60 * 1000) {
+      updateCheckAt = Date.now() + UPDATE_CHECK_EVERY;
+      checkNewBuild();
+    }
+  });
 }

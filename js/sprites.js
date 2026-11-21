@@ -808,6 +808,18 @@ ICONS.gear = [
   '.o.offo.o.',
   '....oo....',
 ];
+ICONS.calendar = [
+  '.o.o..o.o.',
+  'orrrrrrrro',
+  'orrrrrrrro',
+  'owwwwwwwwo',
+  'owcwwcwwco',
+  'owwwwwwwwo',
+  'owcwwcwwwo',
+  'owwwwwwwwo',
+  'oooooooooo',
+  '..........',
+];
 ICONS.chat = [
   '.oooooooo.',
   'offffffffo',

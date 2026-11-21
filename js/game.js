@@ -835,8 +835,9 @@ function buildCollection() {
   if (hint) {
     const left = SECRET.needGhosts().filter((g) => !S.photos[g.id]).length;
     if (S.secretSeen) hint.textContent = '';
-    else if (left > 0) hint.textContent = `すべての写真を集めると、何かが起こるかもしれない……（あと${left}種）`;
-    else if (!S.secretOpen) hint.textContent = '写真はそろった。八王子城跡まで進むと、何かが……';
+    // 実際の条件：雨の日だけの写真と、まだ見ぬ場所（隠しスポット）の写真をのぞいた全種類＋最後のスポットまで解放
+    else if (left > 0) hint.textContent = `写真を集めると、何かが起こるかもしれない……（あと${left}種）`;
+    else if (!S.secretOpen) hint.textContent = `写真はそろった。「${spotLabel(S, LINEAR_SPOTS - 1)}」まで進むと、何かが……`;
     else hint.textContent = '';
   }
 }
@@ -854,7 +855,7 @@ function refreshUI(force) {
     e.el.classList.toggle('locked', !!p.locked);
     if (p.locked) {
       e.name.textContent = '？？？';
-      e.desc.textContent = `「${STAGES[u.req - 1].name}」を解放すると手に入る上位装備。`;
+      e.desc.textContent = `「${spotLabel(S, u.req - 1)}」を解放すると手に入る上位装備。`;
       e.icon.style.filter = 'brightness(0) opacity(0.5)';
       e.lv.textContent = '-';
       e.to.textContent = '';
@@ -943,7 +944,7 @@ function checkSecretSpot() {
   log(`……山道の先に、もうひとつの隧道が口を開けている。「${st.name}」が現れた！`, 'ghost');
   showModal(
     '新たなスポットが現れた',
-    `すべての心霊写真を集めたゆらは、<br>地図にない古い山道を見つけた。<br><br><b>「${st.name}」</b><br><small>スポット一覧から行くことができます。</small>`,
+    `心霊写真を集めきったゆらは、<br>地図にない古い山道を見つけた。<br><br><b>「${st.name}」</b><br><small>スポット一覧から行くことができます。</small>`,
     '行ってみる'
   );
   buildSpots();
@@ -1004,13 +1005,15 @@ function buildAchievements() {
     const done = !!S.ach[a.id];
     if (done) got++;
     const hidden = a.secret && !done;
+    // まだ知らないスポットの名前は伏せる
+    const desc = !done && a.spot && !spotKnown(S, stageIndex(a.spot)) ? '「？？？」を解放する' : a.desc;
     const li = document.createElement('li');
     li.className = 'ach' + (done ? ' done' : '');
     li.innerHTML = `
       <span class="ach-icon">${done ? '★' : '☆'}</span>
       <div class="ach-text">
         <div class="ach-title">${hidden ? '？？？' : a.name}</div>
-        <div class="ach-cond">${hidden ? 'ひみつの実績' : a.desc}</div>
+        <div class="ach-cond">${hidden ? 'ひみつの実績' : desc}</div>
       </div>
       <span class="ach-date">${done ? new Date(S.ach[a.id]).toLocaleDateString('ja-JP') : ''}</span>`;
     list.appendChild(li);
@@ -1324,6 +1327,7 @@ function start() {
   safe('足音', setupStepEvent);
   safe('時刻と天気', () => setupRealWorld());
   safe('バージョン', () => setupVersionInfo());
+  safe('新しい版のお知らせ', () => setupUpdateCheck());
   safe('チャット', () => setupChat());
   safe('タブ', setupTabs);
   // 実績機能より前のセーブは、達成済みの実績を通知なしで記録する
