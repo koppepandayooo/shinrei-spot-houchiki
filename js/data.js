@@ -427,7 +427,7 @@ const ACHIEVEMENTS = [
   { id: 'moped10', name: '峠の走り屋', desc: '原付をLv10にする', check: (s) => s.lv.moped >= 10 },
   { id: 'amuletMax', name: 'お守りフル装備', desc: 'お守りを最大レベルにする', check: (s) => s.lv.amulet >= 8 },
   { id: 'away1h', name: 'のんびり放置', desc: '1時間以上放置してから戻ってくる', check: (s) => s.maxAway >= 3600 },
-  { id: 'rebirth1', name: 'お祓いを受けて出直す', desc: '初めて転生する', check: (s) => s.rebirths >= 1 },
+  { id: 'rebirth1', name: 'お祓いを受けて出直す', desc: '初めてお祓いを受ける', check: (s) => s.rebirths >= 1 },
   { id: 'reikan10', name: '霊感が強い', desc: '霊感を10以上ためる', check: (s) => s.reikan >= 10 },
   { id: 'comp1', name: 'ひとりじゃない', desc: '仲間を1人（1匹）むかえる', check: (s) => Object.values(s.comp).some((v) => v >= 1) },
   { id: 'comp3', name: '心霊スポット探検隊', desc: '仲間を3人そろえる', check: (s) => Object.values(s.comp).filter((v) => v >= 1).length >= 3 },

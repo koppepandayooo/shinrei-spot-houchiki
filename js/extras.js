@@ -29,7 +29,7 @@ function compEffect(c) {
 }
 function buildCompanions() {
   const box = $('#tab-companions');
-  box.innerHTML = '<p class="note tab-note">フィルムで仲間をむかえて、なかよし度を上げると効果がアップします。仲間は転生しても残ります。</p>';
+  box.innerHTML = '<p class="note tab-note">フィルムで仲間をむかえて、なかよし度を上げると効果がアップします。仲間はお祓いを受けても残ります。</p>';
   COMPANIONS.forEach((c) => {
     const el = document.createElement('div');
     el.className = 'card comp';
@@ -133,7 +133,7 @@ function updateCompanions(dt) {
   if (Math.random() < 0.3) log(`黒猫のクロが、どこかからフィルムをくわえて戻ってきた。 +${fmt(amount)}`);
 }
 
-/* ---------- 転生（お祓いを受けて出直す） ---------- */
+/* ---------- お祓い（転生。受けると最初からやり直して霊感を得る） ---------- */
 // 1周の稼ぎの記録値
 const runScore = (run = S.runTotal) =>
   run > REBIRTH.base ? Math.floor(REBIRTH.perDecade * Math.log10(run / REBIRTH.base)) : 0;
@@ -158,16 +158,16 @@ function buildRebirth() {
   box.className = 'card rebirth';
   box.id = 'rebirthBox';
   box.innerHTML = `
-    <h3>転生（お祓いを受けて出直す）</h3>
+    <h3>お祓い（受けると最初からやり直し、霊感を得る）</h3>
     <p class="note">フィルム・装備・解放したスポットが最初に戻るかわりに、<b>霊感</b>を得ます。霊感1につき、すべての収入が+10%（ずっと残ります）。仲間・心霊写真・実績は残ります。</p>
-    <p class="note">霊感は「1周で稼いだフィルム」の<b>最高記録を更新した分</b>だけ増えます。奥まで進んでたくさん稼いでから転生するほどお得です。初めて奥のスポットまで行って転生したときは、踏破ボーナスもあります。</p>
+    <p class="note">霊感は「1周で稼いだフィルム」の<b>最高記録を更新した分</b>だけ増えます。奥まで進んでたくさん稼いでからお祓いを受けるほどお得です。初めて奥のスポットまで行ってお祓いを受けたときは、踏破ボーナスもあります。</p>
     <dl class="rebirth-stats">
       <dt>いまの霊感</dt><dd id="rbNow">0</dd>
       <dt>今回の記録／最高記録</dt><dd id="rbScore">0 / 0</dd>
-      <dt>いま転生すると</dt><dd id="rbGain">+0</dd>
-      <dt>転生後の収入</dt><dd id="rbMult">×1</dd>
+      <dt>いまお祓いを受けると</dt><dd id="rbGain">+0</dd>
+      <dt>お祓い後の収入</dt><dd id="rbMult">×1</dd>
     </dl>
-    <button type="button" class="btn" id="rbBtn">転生する</button>
+    <button type="button" class="btn" id="rbBtn">お祓いを受ける</button>
     <p class="note" id="rbReq"></p>`;
   $('#tab-upgrades').appendChild(box);
   $('#rbBtn').addEventListener('click', doRebirth);
@@ -186,18 +186,18 @@ function refreshRebirth() {
   $('#rbBtn').classList.toggle('affordable', ok);
   $('#rbReq').textContent =
     S.unlocked < REBIRTH.minSpots
-      ? `「${spotLabel(S, REBIRTH.minSpots - 1)}」を解放すると転生できるようになります。`
+      ? `「${spotLabel(S, REBIRTH.minSpots - 1)}」を解放するとお祓いを受けられるようになります。`
       : `最高記録を+1更新するまで：あと ${fmt(Math.max(0, rebirthNeed(Math.max(cur, S.bestRunScore) + 1) - S.runTotal))} フィルム`;
 }
 async function doRebirth() {
   if (!canRebirth()) return;
   const g = rebirthGain();
   const yes = await askConfirm({
-    title: '本当に転生しますか？',
+    title: '本当にお祓いを受けますか？',
     html:
       `霊感 <b>+${g}</b>（収入 ×${fmt(reikanMult())} → <b>×${fmt(reikanMult(S.reikan + g))}</b>）<br><br>` +
       'フィルム・装備・解放したスポットは最初に戻ります。<br>仲間・心霊写真・実績は残ります。',
-    ok: '転生する',
+    ok: 'お祓いを受ける',
     cancel: 'やめる',
   });
   if (!yes || !canRebirth()) return;
@@ -222,7 +222,7 @@ async function doRebirth() {
   if (V.step) endStep('timeout');
   Sound.chime();
   log(`お祓いを受けて、ゆらは出直すことにした。 霊感 +${gainNow}` + (fbNow.b ? `（踏破ボーナス：${fbNow.list.join('・')}）` : ''), 'gold');
-  showModal('転生しました', `霊感 <b>+${gainNow}</b>（合計 ${fmt(S.reikan)}）` + (fbNow.b ? `<br><small>踏破ボーナス +${fbNow.b}（${fbNow.list.join('・')}）を含みます</small>` : '') + `<br>これからの収入は <b>×${fmt(reikanMult())}</b> になります。<br><br><small>${STAGES[0].name}からやり直し。仲間たちも一緒です。</small>`);
+  showModal('お祓いを受けました', `霊感 <b>+${gainNow}</b>（合計 ${fmt(S.reikan)}）` + (fbNow.b ? `<br><small>踏破ボーナス +${fbNow.b}（${fbNow.list.join('・')}）を含みます</small>` : '') + `<br>これからの収入は <b>×${fmt(reikanMult())}</b> になります。<br><br><small>${STAGES[0].name}からやり直し。仲間たちも一緒です。</small>`);
   buildSpots();
   buildCollection();
   refreshCompanions();
@@ -684,7 +684,7 @@ function renderRankRows(list, entries) {
     sc.textContent = fmt(e.score);
     const rb = document.createElement('span');
     rb.className = 'rank-rb';
-    rb.textContent = `転生${e.rebirths || 0}`;
+    rb.textContent = `お祓い${e.rebirths || 0}`;
     li.append(no, nm, meta, sc, rb);
     list.appendChild(li);
   });

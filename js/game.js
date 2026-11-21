@@ -1319,7 +1319,7 @@ function start() {
   safe('心霊写真', buildCollection);
   safe('実績', buildAchievements);
   safe('仲間', () => buildCompanions());
-  safe('転生', () => buildRebirth());
+  safe('お祓い', () => buildRebirth());
   safe('音量', () => setupVolume());
   safe('フラッシュ', () => setupFlashColor());
   safe('パネル', () => setupSheets());
