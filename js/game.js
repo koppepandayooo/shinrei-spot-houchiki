@@ -223,9 +223,19 @@ const ghostIntervalMult = (lv = S.lv.ofuda) => Math.max(0.55, 1 - 0.03 * lv); //
 const rareChance = (lv = S.lv.sensor) => 0.25 + 0.03 * lv;
 const stepWinRate = (lv = S.lv.sensor) => 0.55 + 0.02 * lv;
 
-const exploreReward = () => 3 * STAGES[S.stage].mult * flashMult() * vetMult() * globalMult();
+/* 収入の基準になるスポットの倍率：いま居るスポットではなく、解放済みのスポットのうち一番高いもの。
+ * 放置報酬（閉じている間）も、画面を開いている間の探索・撮影も同じ基準にしてあるので、
+ * 心霊写真を集めるために手前のスポットへ移動しても、収入は下がらない */
+function incomeMult() {
+  let m = 1;
+  STAGES.forEach((st, i) => {
+    if (canGoStage(i)) m = Math.max(m, st.mult);
+  });
+  return m;
+}
+const exploreReward = () => 3 * incomeMult() * flashMult() * vetMult() * globalMult();
 const ratePerSec = () => exploreReward() / exploreDur();
-const clickReward = () => STAGES[S.stage].mult * cameraMult() * kohaiMult() * globalMult();
+const clickReward = () => incomeMult() * cameraMult() * kohaiMult() * globalMult();
 const offlineCapHours = (lv = S.lv.amulet) => 8 + 2 * lv;
 
 function upgradeCost(u) {
@@ -639,7 +649,7 @@ function upgradeEffect(u, n = 1) {
     case 'flash':
       return `探索報酬 ×${fmt(flashMult(lv))}` + (max ? '' : ` → ×${fmt(flashMult(to))}`);
     case 'camera': {
-      const m = STAGES[S.stage].mult;
+      const m = incomeMult();
       return `撮影 +${fmt(m * cameraMult(lv))}` + (max ? '' : ` → +${fmt(m * cameraMult(to))}`);
     }
     case 'moped':
@@ -661,6 +671,10 @@ function buildSpots() {
   const box = $('#tab-spots');
   box.innerHTML = '';
   spotBtn = null;
+  const note = document.createElement('p');
+  note.className = 'note tab-note';
+  note.textContent = '収入（放置・探索・撮影）は、解放したスポットのうち一番高い報酬の倍率で計算されます。どのスポットにいても収入は変わらないので、心霊写真集めに好きなスポットへ移動できます。';
+  box.appendChild(note);
   STAGES.forEach((st, i) => {
     const unlocked = canGoStage(i);
     if (st.secret && !unlocked) return;
