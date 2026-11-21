@@ -349,6 +349,7 @@ let rankLastScore = -1; // 最後に送ったスコア
 let rankLastSpot = 0; // 最後に送った到達スポット
 let rankLastAt = 0; // 最後に送った時刻
 let rankTimer = null; // 後で送る予約
+let rankNextAt = 0; // 次の自動送信の予定時刻
 const RANK_MIN_GAP = 25 * 1000; // サーバーの制限（20秒）より少し長く
 const RANK_AUTO_EVERY = 30 * 60 * 1000; // プレイ中の自動送信の間隔
 // ランキングに出すスポット：これまでに到達した一番奥（転生して最初に戻っても下がらない）
@@ -357,10 +358,10 @@ const reachedSpotNo = () => (S.secretSeen || S.secretOpen ? STAGES.length : Math
 // ランキングのスコア：このシーズン（ランキングのリセット後）に獲得したフィルム
 function rankScore() {
   if (S.rankSeason !== RANK_SEASON) {
-    S.rankBase = S.total;
+    S.rankEarned = 0;
     S.rankSeason = RANK_SEASON;
   }
-  return Math.max(0, Math.floor(S.total - (S.rankBase || 0)));
+  return Math.max(0, Math.floor(S.rankEarned || 0));
 }
 // 前回送ったときから、スコアか到達スポットが変わったか
 const rankDirty = () => rankScore() > rankLastScore || reachedSpotNo() !== rankLastSpot;
@@ -431,17 +432,15 @@ function setupRanking() {
     updateRankUI(true);
     $('#rankName').focus();
   });
-  // 「更新」：自分の最新のスコアを送ってから、一覧を読み直す
-  $('#rankReload').addEventListener('click', async () => {
-    if (S.playerName && rankDirty() && Date.now() - rankLastAt >= RANK_MIN_GAP) await submitScore(false);
-    else queueSubmit();
-    await loadRanking();
-  });
   setupBoard();
-  // プレイしている間は30分ごとに自動送信（画面が見えているときだけ）
+  // プレイしている間は30分ごとに自動送信（画面が見えているときだけ）。
+  // 次の送信時刻は、最後に送った時刻から30分後（スポット移動などで送ったら、そこから数え直す）
+  rankNextAt = Date.now() + RANK_AUTO_EVERY;
   setInterval(() => {
-    if (!document.hidden) autoSubmit();
-  }, RANK_AUTO_EVERY);
+    if (document.hidden || Date.now() < rankNextAt) return;
+    rankNextAt = Date.now() + RANK_AUTO_EVERY;
+    if (rankDirty()) queueSubmit();
+  }, 1000);
   // ゲームを閉じる・裏に回すときにも送る（ページが閉じても届く sendBeacon を使う）
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) beaconSubmit();
@@ -519,6 +518,7 @@ async function submitScore(manual) {
       rankLastScore = score;
       rankLastSpot = spot;
       rankLastAt = Date.now();
+      rankNextAt = rankLastAt + RANK_AUTO_EVERY;
       if (!S.ranked) {
         S.ranked = true;
         checkAchievements();
@@ -646,10 +646,19 @@ async function loadRanking() {
   }
 }
 
+// 次の自動送信までの残り時間（ランキング画面に表示）
+function rankNextText() {
+  if (!RANKING_API || !S.playerName) return '';
+  const left = Math.max(0, rankNextAt - Date.now());
+  if (rankBusy || left < 60 * 1000) return 'まもなくランキングに送信します';
+  return `あと${Math.ceil(left / 60000)}分でランキングに送信します`;
+}
+
 /* ---------- 定期的な表示更新 ---------- */
 setInterval(() => {
   if (typeof S === 'undefined') return;
   refreshCompanions();
   refreshRebirth();
   if ($('#rankScore')) $('#rankScore').textContent = fmt(rankScore());
+  if ($('#rankNext')) $('#rankNext').textContent = rankNextText();
 }, 400);

@@ -992,3 +992,5 @@ body.sheet-open { overflow: hidden; }
 .update-list h3 small { margin-left: 4px; font-size: 12px; }
 .update-list ul { margin: 0 0 10px 1.2em; padding: 0; }
 .update-list li { margin: 3px 0; }
+
+.rank-next { margin-top: -4px; color: var(--muted); font-size: 12px; }

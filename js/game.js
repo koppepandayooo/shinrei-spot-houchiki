@@ -21,7 +21,7 @@ function defaultState() {
     playerId: '', // ランキング用のID（端末ごと）
     playerName: '', // ランキングに出す名前
     rankSeason: 0, // どのランキングシーズンのスコアか
-    rankBase: 0, // そのシーズンが始まったときの総獲得フィルム（スコアはここからの増加分）
+    rankEarned: 0, // そのシーズンに獲得したフィルム（ランキングのスコア）
     ranked: false,
     unlocked: 1, // 解放済みの通常スポットの数（並び順の先頭から）
     bestUnlocked: 1, // これまでに一番奥まで解放した数（転生しても残る）
@@ -107,11 +107,18 @@ function normalize(d) {
   }
   s.bestRunScore = Math.max(0, +s.bestRunScore || 0);
   s.firstBonus = s.firstBonus && typeof s.firstBonus === 'object' ? s.firstBonus : {};
-  // ランキングがリセットされていたら、いまの総獲得フィルムを新しいシーズンの出発点にする
+  // ランキングのスコア（シーズン中に獲得したフィルム）
   if (typeof RANK_SEASON !== 'undefined' && s.rankSeason !== RANK_SEASON) {
-    s.rankBase = Number.isFinite(s.total) ? s.total : 0;
+    // ランキングがリセットされたら0から
+    s.rankEarned = 0;
     s.rankSeason = RANK_SEASON;
+  } else if (d.rankEarned == null) {
+    // 「総獲得フィルム − 出発点」で数えていた版からの引っ越し（それまでに増えた分は引き継ぐ）
+    const diff = (Number.isFinite(s.total) ? s.total : 0) - (Number.isFinite(d.rankBase) ? d.rankBase : s.total);
+    s.rankEarned = Math.max(0, Number.isFinite(diff) ? diff : 0);
   }
+  if (!Number.isFinite(s.rankEarned) || s.rankEarned < 0) s.rankEarned = 0;
+  delete s.rankBase;
   if (s.flashColor !== 'black') s.flashColor = 'white';
   s.unlocked = Math.min(Math.max(1, s.unlocked | 0), LINEAR_SPOTS);
   s.bestUnlocked = Math.min(LINEAR_SPOTS, Math.max(s.unlocked, s.bestUnlocked | 0));
@@ -228,6 +235,7 @@ function gain(n) {
   S.runTotal += n;
   S.film += n;
   S.total += n;
+  S.rankEarned = (S.rankEarned || 0) + n; // ランキングのスコア（総獲得フィルムとは別に数える）
 }
 
 /* ---------- 数値表示（日本語の単位） ---------- */
