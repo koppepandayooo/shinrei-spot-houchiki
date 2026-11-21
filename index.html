@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261120-4">
+  <link rel="stylesheet" href="css/style.css?v=20261121-12">
 </head>
 <body>
   <canvas id="backdrop" aria-hidden="true"></canvas>
@@ -36,7 +36,13 @@
       <section class="scene-wrap" id="sceneWrap" aria-label="ゲーム画面（タップで撮影）">
         <canvas id="scene" width="576" height="324"></canvas>
         <div class="hud">
-          <div class="stage-plate" id="stageName"></div>
+          <div class="hud-left">
+            <div class="stage-plate" id="stageName"></div>
+            <div class="wx-badge" id="wxBadge">
+              <button type="button" class="wx-btn" id="wxBtn" title="いまの時間と天気"><span id="wxText">🌙</span> <span id="wxTime"></span></button>
+              <a class="wx-credit" href="https://open-meteo.com/" target="_blank" rel="noopener">Weather data by Open-Meteo.com</a>
+            </div>
+          </div>
           <div class="explore">
             <span>探索中</span>
             <div class="bar"><div id="exploreFill"></div></div>
@@ -89,6 +95,7 @@
         </div>
         <div class="card">
           <h3>心霊写真コレクション <span class="photo-count" id="photoCount">0 / 0</span></h3>
+          <p class="photo-hint" id="photoHint"></p>
           <div class="photo-grid" id="photoGrid"></div>
         </div>
         <div class="card">
@@ -125,6 +132,13 @@
           <button type="button" class="btn" id="soundBtn">効果音：ON</button>
           <div class="vol-row"><label for="volSfx">効果音の音量</label><input type="range" id="volSfx" min="0" max="100" step="5"><span id="volSfxVal">70%</span></div>
           <div class="vol-row"><label for="volAmb">環境音の音量</label><input type="range" id="volAmb" min="0" max="100" step="5"><span id="volAmbVal">70%</span></div>
+        </div>
+        <div class="card settings">
+          <h3>表示</h3>
+          <div class="flash-color"><span>撮影フラッシュの色</span><button type="button" class="btn" data-color="white">白</button><button type="button" class="btn" data-color="black">黒</button></div>
+          <p class="note">まぶしいときは「黒」にすると、撮影のときに画面が暗く光ります。</p>
+          <button type="button" class="btn" id="realWorldBtn">現実の時刻・天気と連動：ON</button>
+          <p class="note">ONのときは、日本時間の時刻で昼・夕方・夜が切り替わり、各スポットのあたりの現実の天気（<a href="https://open-meteo.com/" target="_blank" rel="noopener">Weather data by Open-Meteo.com</a>・<a href="https://creativecommons.org/licenses/by/4.0/deed.ja" target="_blank" rel="noopener">CC BY 4.0</a>）が画面に反映されます。位置情報は使いません。OFFにすると、いつもの夜の表示になります。</p>
         </div>
         <div class="card savecode">
           <h3>セーブデータ</h3>
@@ -189,6 +203,16 @@
       <button type="button" class="btn affordable" id="tabLockBtn">このタブで遊ぶ</button>
     </div>
   </div>
+  <div class="modal hidden" id="confirmDlg" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <div class="modal-box">
+      <h2 id="confirmTitle"></h2>
+      <div id="confirmBody"></div>
+      <div class="confirm-btns">
+        <button type="button" class="btn" id="confirmCancel">やめる</button>
+        <button type="button" class="btn affordable" id="confirmOk">OK</button>
+      </div>
+    </div>
+  </div>
   <div class="toast" id="toast"></div>
   <div class="ach-toast" id="achToast" aria-live="polite">
     <span class="ach-badge">🏆 実績解除</span>
@@ -197,13 +221,15 @@
   </div>
 
   <!-- ?v= はキャッシュ対策。ファイルを更新したら index.html の v= の値をすべて新しくする -->
-  <script src="js/config.js?v=20261120-4"></script>
-  <script src="js/data.js?v=20261120-4"></script>
-  <script src="js/sprites.js?v=20261120-4"></script>
-  <script src="js/scene.js?v=20261120-4"></script>
-  <script src="js/sound.js?v=20261120-4"></script>
-  <script src="js/backdrop.js?v=20261120-4"></script>
-  <script src="js/game.js?v=20261120-4"></script>
-  <script src="js/extras.js?v=20261120-4"></script>
+  <script src="js/config.js?v=20261121-12"></script>
+  <script src="js/data.js?v=20261121-12"></script>
+  <script src="js/sprites.js?v=20261121-12"></script>
+  <script src="js/scene.js?v=20261121-12"></script>
+  <script src="js/sound.js?v=20261121-12"></script>
+  <script src="js/backdrop.js?v=20261121-12"></script>
+  <script src="js/weather.js?v=20261121-12"></script>
+  <script src="js/game.js?v=20261121-12"></script>
+  <script src="js/extras.js?v=20261121-12"></script>
+  <script src="js/realworld.js?v=20261121-12"></script>
 </body>
 </html>

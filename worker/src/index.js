@@ -117,7 +117,7 @@ async function postScore(request, env, cors) {
   if (!name) return json({ error: 'bad_name' }, 400, cors);
   const score = Number(body.score);
   if (!Number.isFinite(score) || score < 0 || score > MAX_SCORE) return json({ error: 'bad_score' }, 400, cors);
-  const spot = clampInt(body.spot, 1, 5);
+  const spot = clampInt(body.spot, 1, 8); // 1〜7 = 通常スポット（弱い順）、8 = 隠しスポット
   const rebirths = clampInt(body.rebirths, 0, 1_000_000);
   const photos = clampInt(body.photos, 0, 100_000_000);
 

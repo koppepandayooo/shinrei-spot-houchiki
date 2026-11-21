@@ -902,3 +902,86 @@ body.sheet-open { overflow: hidden; }
 }
 .tab-lock h2 { margin: 0 0 10px; font-size: 18px; font-weight: normal; color: var(--ghost); }
 .tab-lock p { font-size: 13px; line-height: 1.7; margin: 0 0 14px; }
+
+/* ---------- ランキング：縦に並べて、スコアと転生回数を見やすく ---------- */
+.rank-row { grid-template-columns: 2.2em minmax(0, 1fr) auto auto 3.8em; }
+.rank-rb { font-size: 11px; color: #c8b8ff; text-align: right; white-space: nowrap; }
+.rank-score { font-variant-numeric: tabular-nums; }
+.rank-mini .rank-row { grid-template-columns: 2em minmax(0, 1fr) auto 3.6em; }
+@media (min-width: 860px) {
+  .rank-board.desk .rank-mini {
+    display: block;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+  .rank-board.desk .rank-mini .rank-row { grid-template-columns: 2.2em minmax(0, 1fr) auto auto 3.8em; }
+}
+
+/* ---------- 確認ダイアログ・表示設定・コレクションの進み具合 ---------- */
+.confirm-btns { display: flex; gap: 10px; justify-content: center; }
+.confirm-btns .btn { min-width: 110px; }
+#confirmBody { font-size: 14px; line-height: 1.7; margin-bottom: 14px; }
+#confirmDlg { z-index: 90; }
+.flash-color { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.flash-color .btn { min-width: 56px; }
+.flash-color .btn.active { border-color: var(--gold); color: var(--gold); }
+.photo-hint { margin: 0 0 8px; font-size: 12px; color: #b8a8ff; min-height: 0; }
+.photo-hint:empty { display: none; }
+
+/* ---------- PC：ページ全体は動かさず、タブの中身だけスクロール ---------- */
+@media (min-width: 860px) {
+  html, body { height: 100%; overflow: hidden; }
+  #app {
+    height: 100vh;
+    height: 100dvh;
+    padding-top: 12px;
+    padding-bottom: 8px;
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+  .left-col { position: static; min-height: 0; overflow-y: auto; }
+  .panel {
+    margin-top: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
+  }
+  .panel .tabs { flex: none; }
+  .panel .tab-body:not(.hidden) {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .footer { margin: 6px 0 0; }
+}
+
+/* ---------- 現実の時刻・天気 ---------- */
+.hud-left { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.wx-badge { pointer-events: auto; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+.wx-btn {
+  background: rgba(8, 6, 16, 0.7);
+  border: 1px solid var(--line-hi);
+  color: #dfe6f4;
+  font: inherit;
+  font-size: 12px;
+  padding: 1px 6px;
+  cursor: pointer;
+}
+.wx-btn:hover { background: rgba(30, 24, 56, 0.85); }
+.wx-credit {
+  font-size: 9px;
+  color: rgba(220, 225, 240, 0.7);
+  text-decoration: none;
+  background: rgba(8, 6, 16, 0.45);
+  padding: 0 4px;
+}
+.wx-credit:hover { text-decoration: underline; color: #fff; }
+.wx-effects { margin: 6px 0 8px 1.2em; padding: 0; text-align: left; }
+.wx-effects li { margin: 2px 0; }
+.wx-tag { color: #9fc6ff; font-weight: normal; margin-right: 4px; }
+#realWorldBtn { margin-top: 10px; }
+@media (max-width: 600px) {
+  .wx-btn { font-size: 10px; padding: 0 4px; }
+  .wx-credit { font-size: 8px; }
+}

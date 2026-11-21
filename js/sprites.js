@@ -535,6 +535,74 @@ const GHOST_SPRITES = {
   },
 };
 
+/* 新しいスポットの幽霊（形は既存のものを流用して色を変えたもの＋受話器） */
+GHOST_SPRITES.juwaki = {
+  pal: { o: '#0a1a10', g: '#2f9a50', G: '#46c06a', w: '#e8fff0' },
+  rows: [
+    '.w........w.',
+    'w..........w',
+    '.oooooooooo.',
+    'oGGGGGGGGGGo',
+    'oggo....oggo',
+    'oggo....oggo',
+    '.oo......oo.',
+  ],
+};
+// 傘をさした女（顔は髪で隠れている）
+GHOST_SPRITES.amagasa = {
+  pal: { u: '#2a3450', U: '#45567e', h: '#8a9ab8', k: '#0b0910', s: '#cfd8ec', w: '#dfe6f4', v: '#a3b0cc' },
+  rows: [
+    '.....uuuu.....',
+    '...uuUuuUuu...',
+    '..uuUuuuuUuu..',
+    '.uUuuuuuuuuUu.',
+    'uuuuuuuuuuuuuu',
+    'u.u.u.hh.u.u.u',
+    '......hkkk....',
+    '.....khkkkk...',
+    '.....khsskk...',
+    '.....khkskk...',
+    '....kkhkkkkk..',
+    '....kwhwwwwk..',
+    '....wwhwwwww..',
+    '...kwwhwwwwwk.',
+    '...wwwwvwwwww.',
+    '...wwwwvwwwww.',
+    '....wwwwwwww..',
+    '....wwwwwwww..',
+    '.....wwwwww...',
+    '......wwww....',
+  ],
+};
+// 一段ずつ上へ増えていく、はだしの足あと
+GHOST_SPRITES.nureashi = {
+  pal: { f: '#4f7fb8', F: '#9fd0ff', W: '#e8f6ff' },
+  rows: [
+    '..........f.f.',
+    '.........fFFf.',
+    '.........fFWf.',
+    '.........fFFf.',
+    '..........ff..',
+    '..............',
+    '......f.f.....',
+    '.....fFFf.....',
+    '.....fFWf.....',
+    '.....fFFf.....',
+    '......ff......',
+    '..............',
+    '..f.f.........',
+    '.fFFf.........',
+    '.fFWf.........',
+    '.fFFf.........',
+    '..ff..........',
+  ],
+};
+GHOST_SPRITES.hakonaka = { pal: { o: '#04100a', b: '#0c2016', W: '#d8ffe8' }, rows: GHOST_SPRITES.nobi.rows };
+GHOST_SPRITES.kawabi = { pal: { g: '#e0b040', G: '#ffe08a', W: '#fffbe0' }, rows: GHOST_SPRITES.hitodama.rows };
+GHOST_SPRITES.kiri = { pal: { k: '#5a6070', s: '#c8d0dc', w: '#d0d8e4', v: '#9aa4b8' }, rows: GHOST_SPRITES.onna.rows };
+GHOST_SPRITES.midori = { pal: { f: '#30b050', F: '#a0ffb0', W: '#f0fff4' }, rows: GHOST_SPRITES.onibi.rows };
+GHOST_SPRITES.shirokage = { pal: { o: '#24402e', w: '#d8f0e0', k: '#1a2a20', m: '#4a6a56', W: '#ffffff' }, rows: GHOST_SPRITES.shiro.rows };
+
 /* ---------- UIアイコン ---------- */
 const ICONS = {
   film: [

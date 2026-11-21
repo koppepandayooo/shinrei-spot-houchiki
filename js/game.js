@@ -21,7 +21,17 @@ function defaultState() {
     playerId: '', // ランキング用のID（端末ごと）
     playerName: '', // ランキングに出す名前
     ranked: false,
-    unlocked: 1,
+    unlocked: 1, // 解放済みの通常スポットの数（並び順の先頭から）
+    bestUnlocked: 1, // これまでに一番奥まで解放した数（転生しても残る）
+    secretOpen: false, // 隠しスポットに行けるか（転生すると閉じる）
+    secretSeen: false, // 隠しスポットの「出現」を見たことがあるか（ずっと残る）
+    spotVer: 2, // スポットの並び順のバージョン（2 = 電話ボックスから始まる7か所）
+    reikanV2: true, // 霊感の計算式を見直したあとのセーブか
+    rebirthV3: true, // 「最高記録」方式の転生になったあとのセーブか
+    bestRunScore: 0, // 1周で稼いだフィルムの最高記録（記録値）
+    firstBonus: {}, // もらい済みの踏破ボーナス
+    flashColor: 'white', // 撮影フラッシュの色（white / black）
+    realWorld: true, // 現実の時刻・天気と連動するか
     stage: 0,
     clicks: 0,
     ghosts: 0,
@@ -62,8 +72,46 @@ function normalize(d) {
   s.playerName = String(d.playerName || '').slice(0, 12);
   if (!BUY_MODES.some((m) => m.id === s.buyMode)) s.buyMode = 'x1';
   s.achInit = !!d.achInit;
-  s.unlocked = Math.min(Math.max(1, s.unlocked | 0), STAGES.length);
-  s.stage = Math.min(Math.max(0, s.stage | 0), s.unlocked - 1);
+  // スポットの並び替え（旧：小峰→道了堂→城跡→吹上→旧旧吹上）より前のセーブを引っ越す。
+  // 解放済みで一番奥のスポットまでを解放済みにする（手前の新しいスポットは無料で開く）
+  if (!d.spotVer) {
+    const OLD = ['komine', 'doryodo', 'hachioji', 'fukiage', 'kyukyu'];
+    const had = OLD.slice(0, Math.min(5, Math.max(1, d.unlocked | 0)));
+    let deepest = 0;
+    had.forEach((id) => {
+      const i = stageIndex(id);
+      if (i >= 0 && !STAGES[i].secret) deepest = Math.max(deepest, i);
+    });
+    s.unlocked = deepest + 1;
+    s.secretOpen = had.includes('kyukyu');
+    s.secretSeen = s.secretOpen;
+    s.stage = Math.max(0, stageIndex(OLD[d.stage | 0] || 'komine'));
+    s.spotVer = 2;
+  }
+  // 霊感の見直し：多すぎる霊感を丸める（多いほど強く。3→3、1000→90、300万→195）
+  if (!d.reikanV2) {
+    s.reikan = Math.min(s.reikan, Math.round(30 * Math.log10(1 + s.reikan)));
+    s.reikanV2 = true;
+  }
+  // 「最高記録」方式への引っ越し：いま持っている霊感を最高記録とみなし、
+  // すでに奥まで行ったことがあるスポットの踏破ボーナスはもらい済みにする
+  if (!d.rebirthV3) {
+    s.bestRunScore = Math.floor(s.reikan);
+    s.firstBonus = {};
+    if (s.bestUnlocked >= stageIndex('fukiage') + 1) s.firstBonus.fukiage = true;
+    if (s.bestUnlocked >= stageIndex('hachioji') + 1) s.firstBonus.hachioji = true;
+    if (s.secretSeen) s.firstBonus.kyukyu = true;
+    s.rebirthV3 = true;
+  }
+  s.bestRunScore = Math.max(0, +s.bestRunScore || 0);
+  s.firstBonus = s.firstBonus && typeof s.firstBonus === 'object' ? s.firstBonus : {};
+  if (s.flashColor !== 'black') s.flashColor = 'white';
+  s.unlocked = Math.min(Math.max(1, s.unlocked | 0), LINEAR_SPOTS);
+  s.bestUnlocked = Math.min(LINEAR_SPOTS, Math.max(s.unlocked, s.bestUnlocked | 0));
+  s.secretOpen = !!s.secretOpen;
+  s.secretSeen = !!s.secretSeen || s.secretOpen;
+  s.stage = Math.max(0, Math.min(STAGES.length - 1, s.stage | 0));
+  if (STAGES[s.stage].secret ? !s.secretOpen : s.stage >= s.unlocked) s.stage = s.unlocked - 1;
   if (!Number.isFinite(s.film) || s.film < 0) s.film = 0;
   if (!Number.isFinite(s.total) || s.total < s.film) s.total = s.film;
   if (!Number.isFinite(s.runTotal)) s.runTotal = s.total;
@@ -137,7 +185,7 @@ function importCode(code) {
 }
 
 /* ---------- 計算式 ---------- */
-const milestone = (lv) => Math.pow(2, Math.floor(lv / 10)); // 10レベルごとに2倍
+const milestone = (lv) => Math.pow(2, Math.floor(lv / BALANCE.milestoneEvery)); // 一定レベルごとに効果2倍
 const flashMult = (lv = S.lv.flash) => (1 + 0.5 * lv) * milestone(lv);
 const cameraMult = (lv = S.lv.camera) => (1 + lv) * milestone(lv);
 const exploreDur = (lv = S.lv.moped) => Math.max(0.5, 4 / (1 + 0.25 * lv));
@@ -220,6 +268,8 @@ const V = {
   flickerT: 0,
   ghost: null,
   ghostTimer: 25,
+  bolt: 0, // 雷の光（1→0）
+  boltT: null,
   cycle: 0,
   pauseT: 0,
   autoPhotoT: 6,
@@ -290,6 +340,38 @@ function toast(msg) {
 }
 
 /* ---------- モーダル ---------- */
+function escapeHtml(t) {
+  return String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+// 2つのボタンで答える確認ダイアログ。はい = true、いいえ・閉じる = false
+function askConfirm({ title, html, ok = 'OK', cancel = 'やめる', danger = false }) {
+  return new Promise((resolve) => {
+    const dlg = $('#confirmDlg');
+    $('#confirmTitle').textContent = title;
+    $('#confirmBody').innerHTML = html;
+    const okBtn = $('#confirmOk');
+    const noBtn = $('#confirmCancel');
+    okBtn.textContent = ok;
+    noBtn.textContent = cancel;
+    okBtn.classList.toggle('danger', danger);
+    okBtn.classList.toggle('affordable', !danger);
+    const done = (v) => {
+      dlg.classList.add('hidden');
+      okBtn.onclick = null;
+      noBtn.onclick = null;
+      dlg.onclick = null;
+      resolve(v);
+    };
+    okBtn.onclick = () => done(true);
+    noBtn.onclick = () => done(false);
+    dlg.onclick = (e) => {
+      if (e.target === dlg) done(false);
+    };
+    dlg.classList.remove('hidden');
+    noBtn.focus();
+  });
+}
+
 const modalQueue = [];
 function showModal(title, html, btn = 'OK') {
   if (!$('#modal').classList.contains('hidden')) {
@@ -307,26 +389,26 @@ function hideModal() {
   if (next) showModal(...next);
 }
 
-/* ---------- 放置報酬 ---------- */
-function grantOffline(sec, isStartup) {
-  if (sec < 5) return;
+/* ---------- 放置報酬 ----------
+ * 「ゲームを閉じていた時間」だけが対象。起動したときに、最後に保存した時刻との差で計算する。
+ * タブを切り替えて裏に回しただけでは付かない（裏にある間は収入も止まる）。
+ * 短い離脱（再読み込みなど）では付かないよう、OFFLINE_MIN_SEC 以上閉じていたときだけ */
+const OFFLINE_MIN_SEC = 5 * 60;
+function grantOffline(sec) {
+  if (!(sec >= OFFLINE_MIN_SEC)) return;
   S.maxAway = Math.max(S.maxAway || 0, sec);
   const capSec = offlineCapHours() * 3600;
   const used = Math.min(sec, capSec);
   const amount = ratePerSec() * used;
   gain(amount);
   const capped = sec > capSec;
-  if (sec >= 60 || isStartup) {
-    showModal(
-      'おかえりなさい',
-      `ゆらは <b>${fmtTime(used)}</b> のあいだ<br>「${STAGES[S.stage].name}」を探索していました。<br><br>` +
-        `<span class="big-gain"><img class="icon-s" src="${Sprites.iconURL('film')}" alt="">+${fmt(amount)}</span><br>` +
-        (capped ? `<small>（放置の上限は ${offlineCapHours()} 時間。お守りで延ばせます）</small>` : ''),
-      '受け取る'
-    );
-  } else {
-    toast(`放置ボーナス +${fmt(amount)} フィルム`);
-  }
+  showModal(
+    'おかえりなさい',
+    `ゆらは <b>${fmtTime(used)}</b> のあいだ<br>「${STAGES[S.stage].name}」を探索していました。<br><br>` +
+      `<span class="big-gain"><img class="icon-s" src="${Sprites.iconURL('film')}" alt="">+${fmt(amount)}</span><br>` +
+      (capped ? `<small>（放置の上限は ${offlineCapHours()} 時間。お守りで延ばせます）</small>` : ''),
+    '受け取る'
+  );
   log(`放置中に ${fmt(amount)} フィルムを手に入れた`, 'gold');
   save();
 }
@@ -377,7 +459,11 @@ function catchGhost(g) {
 }
 
 function pickGhostType() {
-  const pool = GHOSTS.filter((d) => d.stage === S.stage);
+  const here = GHOSTS.filter((d) => d.stage === STAGES[S.stage].id);
+  const wet = typeof envIsWet === 'function' && envIsWet();
+  const rainy = here.filter((d) => d.weather === 'rain');
+  if (wet && rainy.length && Math.random() < 0.4) return rainy[Math.floor(Math.random() * rainy.length)].id;
+  const pool = here.filter((d) => !d.weather);
   const rare = pool.filter((d) => d.rare);
   const common = pool.filter((d) => !d.rare);
   const list = rare.length && Math.random() < rareChance() ? rare : common.length ? common : pool;
@@ -428,8 +514,9 @@ function buy(id) {
   S.lv[id] += p.n;
   sfxBuy();
   const after = S.lv[id];
-  if ((id === 'flash' || id === 'camera') && Math.floor(after / 10) > Math.floor(before / 10)) {
-    toast(`${u.name} Lv${after}！効果が${Math.pow(2, Math.floor(after / 10) - Math.floor(before / 10))}倍に！`);
+  const ME = BALANCE.milestoneEvery;
+  if ((id === 'flash' || id === 'camera') && Math.floor(after / ME) > Math.floor(before / ME)) {
+    toast(`${u.name} Lv${after}！効果が${Math.pow(2, Math.floor(after / ME) - Math.floor(before / ME))}倍に！`);
   } else if (p.n > 1) {
     toast(`${u.name} Lv${before} → Lv${after}（${p.n}個まとめ買い）`);
   }
@@ -445,20 +532,26 @@ function setBuyMode(mode) {
   save();
 }
 
+// そのスポットに行けるか（通常スポットは解放済みか、隠しスポットは出現済みか）
+const canGoStage = (i) => !!STAGES[i] && (STAGES[i].secret ? S.secretOpen : i < S.unlocked);
+
 function unlockNext() {
-  if (S.unlocked >= STAGES.length) return;
+  if (S.unlocked >= LINEAR_SPOTS) return;
   const st = STAGES[S.unlocked];
   if (st.secret || S.film < st.unlock) return;
   S.film -= st.unlock;
   S.unlocked++;
+  S.bestUnlocked = Math.max(S.bestUnlocked, S.unlocked);
   Sound.unlock();
   log(`新しいスポット「${st.name}」へ行けるようになった！`, 'gold');
   goStage(S.unlocked - 1);
+  checkSecretSpot();
   save();
 }
 
 function goStage(i) {
-  if (i >= S.unlocked || i === S.stage) return;
+  setTimeout(() => typeof refreshEnv === 'function' && refreshEnv(), 0);
+  if (!canGoStage(i) || i === S.stage) return;
   V.fade = 1;
   S.stage = i;
   V.cycle = 0;
@@ -542,9 +635,9 @@ function buildSpots() {
   box.innerHTML = '';
   spotBtn = null;
   STAGES.forEach((st, i) => {
-    const unlocked = i < S.unlocked;
+    const unlocked = canGoStage(i);
     if (st.secret && !unlocked) return;
-    const isNext = i === S.unlocked;
+    const isNext = !st.secret && i === S.unlocked;
     const cur = i === S.stage;
     const el = document.createElement('div');
     el.className = 'card spot' + (cur ? ' current' : '') + (unlocked ? '' : ' locked') + (isNext ? ' next' : '');
@@ -597,16 +690,29 @@ function buildRecords() {
   });
   $('#resetBtn').addEventListener('click', async () => {
     const ranked = !!(RANKING_API && S.playerId && S.playerName);
-    if (
-      !confirm(
-        'セーブデータを削除して最初からやり直します。よろしいですか？' +
-          (ranked ? `\n\nランキングの記録（${S.playerName}）も削除されます。` : '')
-      )
-    )
-      return;
+    const yes = await askConfirm({
+      title: 'データを削除しますか？',
+      html:
+        'セーブデータを削除して、最初からやり直します。<br>元に戻すことはできません。' +
+        (ranked ? `<br><br>ランキングの記録（${escapeHtml(S.playerName)}）も削除されます。` : ''),
+      ok: '削除する',
+      cancel: 'やめる',
+      danger: true,
+    });
+    if (!yes) return;
     if (ranked) {
       const ok = await deleteRankingEntry(S.playerId);
-      if (!ok && !confirm('ランキングの記録を削除できませんでした（通信エラー）。\nセーブデータだけ削除しますか？')) return;
+      if (
+        !ok &&
+        !(await askConfirm({
+          title: 'ランキングの記録を削除できませんでした',
+          html: '通信エラーのため、ランキングの記録を削除できませんでした。<br>セーブデータだけ削除しますか？',
+          ok: 'セーブだけ削除',
+          cancel: 'やめる',
+          danger: true,
+        }))
+      )
+        return;
     }
     try {
       localStorage.removeItem(SAVE_KEY);
@@ -641,7 +747,7 @@ function buildRecords() {
       showMsg('コードを表示しました。選択してコピーしてください。', true);
     }
   });
-  $('#importBtn').addEventListener('click', () => {
+  $('#importBtn').addEventListener('click', async () => {
     if (!box.value.trim()) {
       showMsg('上の欄にセーブコードを貼り付けてから押してください。', false);
       return;
@@ -654,7 +760,13 @@ function buildRecords() {
       return;
     }
     const sum = `フィルム ${fmt(data.film)}／解放スポット ${data.unlocked}か所／心霊写真 ${Object.keys(data.photos).length}種`;
-    if (!confirm(`このセーブデータを読み込みますか？\n${sum}\n\n※いまの進行状況は上書きされます。`)) return;
+    const yes = await askConfirm({
+      title: 'セーブデータを読み込みますか？',
+      html: `${sum}<br><br><small>いまの進行状況は上書きされます。</small>`,
+      ok: '読み込む',
+      cancel: 'やめる',
+    });
+    if (!yes) return;
     S = data;
     S.lastSave = Date.now();
     V.ghost = null;
@@ -679,17 +791,27 @@ function buildCollection() {
   GHOSTS.forEach((g) => {
     const p = S.photos[g.id];
     if (p) got++;
-    const known = g.stage < S.unlocked;
+    const si = stageIndex(g.stage);
+    const known = STAGES[si].secret ? S.secretSeen : si < Math.max(S.unlocked, S.bestUnlocked);
     const el = document.createElement('div');
     el.className = 'photo' + (p ? ' got' : '') + (g.rare ? ' rare' : '');
     el.innerHTML = `
       <div class="photo-img"><img src="${Sprites.ghostURL(g.id, !p)}" alt="">${p ? '' : '<span>？</span>'}</div>
       <div class="photo-name">${p ? g.name : '？？？'}${g.rare ? '<em>★レア</em>' : ''}</div>
-      <div class="photo-meta">${known ? STAGES[g.stage].name : '未知のスポット'}${p ? `・${p.n}枚` : ''}</div>
-      <div class="photo-desc">${p ? g.desc : known ? 'このスポットのどこかに出るらしい…' : 'まだ見ぬ場所に潜んでいる。'}</div>`;
+      <div class="photo-meta">${g.weather ? '<b class="wx-tag">☂雨の日</b>' : ''}${known ? STAGES[si].name : '未知のスポット'}${p ? `・${p.n}枚` : ''}</div>
+      <div class="photo-desc">${p ? g.desc : g.weather ? (known ? '現実のこのあたりが雨の日に、ここに出るらしい…' : '雨の日に、どこかのスポットに出るらしい…') : known ? 'このスポットのどこかに出るらしい…' : 'まだ見ぬ場所に潜んでいる。'}</div>`;
     grid.appendChild(el);
   });
   $('#photoCount').textContent = `${got} / ${GHOSTS.length}`;
+  // 隠しスポットへの進み具合（名前は出さない）
+  const hint = $('#photoHint');
+  if (hint) {
+    const left = SECRET.needGhosts().filter((g) => !S.photos[g.id]).length;
+    if (S.secretSeen) hint.textContent = '';
+    else if (left > 0) hint.textContent = `すべての写真を集めると、何かが起こるかもしれない……（あと${left}種）`;
+    else if (!S.secretOpen) hint.textContent = '写真はそろった。八王子城跡まで進むと、何かが……';
+    else hint.textContent = '';
+  }
 }
 
 let uiTimer = 0;
@@ -772,17 +894,29 @@ function lightRadius() {
 }
 
 /* ---------- 隠しスポット：旧旧吹上隧道 ---------- */
+function secretReady() {
+  return S.unlocked >= LINEAR_SPOTS && SECRET.needGhosts().every((g) => S.photos[g.id]);
+}
 function checkSecretSpot() {
-  const i = STAGES.findIndex((st) => st.secret);
-  if (i < 0 || S.unlocked !== i) return; // 直前のスポットまで解放済みのときだけ
-  const st = STAGES[i];
-  if (S.ghosts < st.secretPhotos) return;
-  S.unlocked = i + 1;
+  if (S.secretOpen || !secretReady()) return;
+  const st = STAGES[stageIndex(SECRET.id)];
+  S.secretOpen = true;
+  if (S.secretSeen) {
+    // 2回目以降（転生して登り直したとき）は、通常のスポットと同じ解放表示
+    Sound.unlock();
+    log(`新しいスポット「${st.name}」へ行けるようになった！`, 'gold');
+    toast(`新しいスポット「${st.name}」へ行けるようになった！`);
+    buildSpots();
+    buildCollection();
+    save();
+    return;
+  }
+  S.secretSeen = true;
   sfxTone(220, 110, 1.4, 'sine', 0.12);
   log(`……山道の先に、もうひとつの隧道が口を開けている。「${st.name}」が現れた！`, 'ghost');
   showModal(
     '新たなスポットが現れた',
-    `心霊写真を撮り続けるうちに、ゆらは<br>地図にない古い山道を見つけた。<br><br><b>「${st.name}」</b><br><small>スポット一覧から行くことができます。</small>`,
+    `すべての心霊写真を集めたゆらは、<br>地図にない古い山道を見つけた。<br><br><b>「${st.name}」</b><br><small>スポット一覧から行くことができます。</small>`,
     '行ってみる'
   );
   buildSpots();
@@ -893,13 +1027,17 @@ function setupStepEvent() {
   $('#stepShoot').addEventListener('click', () => endStep('shoot'));
 }
 function startStep() {
-  V.step = { left: STEP_LIMIT };
+  const wet = typeof envIsWet === 'function' && envIsWet();
+  V.step = { left: STEP_LIMIT, wet };
   $('#stepEvent').classList.remove('hidden');
-  log('……足音が聞こえる', 'ghost');
+  const msg = wet ? '……雨音にまじって、ぴちゃり、ぴちゃりと足音が近づいてくる' : '……足音が聞こえる';
+  $('#stepEvent .step-text').textContent = wet ? '……雨の中を、足音が近づいてくる' : '……足音が聞こえる';
+  log(msg, 'ghost');
   sfxSteps();
 }
 function endStep(choice) {
   if (!V.step) return;
+  const wet = V.step.wet;
   V.step = null;
   V.stepTimer = 70 + Math.random() * 70;
   $('#stepEvent').classList.add('hidden');
@@ -909,7 +1047,7 @@ function endStep(choice) {
     S.steps.run++;
     log('ゆらは足音から逃げ出した。……何も起きなかった。');
   } else if (Math.random() < stepWinRate()) {
-    const bonus = Math.max(ratePerSec() * 120, clickReward() * 40);
+    const bonus = Math.max(ratePerSec() * 120, clickReward() * 40) * (wet ? 1.5 : 1); // 雨の日は1.5倍
     gain(bonus);
     S.steps.win++;
     V.flash = 0.8;
@@ -930,6 +1068,9 @@ function endStep(choice) {
   checkAchievements();
   save();
 }
+
+// トンネル系スポット（ずっとトンネルの中を進む）にいるか。雨音・雷をこもった音にするのに使う
+const insideNow = () => !!STAGES[S.stage].theme.interior;
 
 /* ---------- 更新 ---------- */
 function update(dt) {
@@ -1039,7 +1180,7 @@ function update(dt) {
   } else if (!V.calm) {
     V.ghostTimer -= dt;
     if (V.ghostTimer <= 0) {
-      V.ghostTimer = (30 + Math.random() * 35) * ghostIntervalMult();
+      V.ghostTimer = ((30 + Math.random() * 35) * ghostIntervalMult()) / (typeof envGhostMult === 'function' ? envGhostMult() : 1);
       V.ghost = { type: pickGhostType(), x: 104 + Math.random() * 64, y: 20 + Math.random() * 34, age: 0, life: 7, caught: false, caughtT: 0 };
       log('……何かいる。今だ、撮影して！', 'ghost');
       Sound.ghostAppear();
@@ -1065,7 +1206,9 @@ function update(dt) {
   }
 
   // 環境音（風・水滴・滝）
-  Sound.ambientUpdate(dt, V.t, !!STAGES[S.stage].theme.interior, V.fallsVol);
+  if (typeof updateRealWorld === 'function') updateRealWorld(dt);
+  const env = typeof envNow !== 'undefined' ? envNow : null;
+  Sound.ambientUpdate(dt, V.t, insideNow(), V.fallsVol, env && env.kind !== 'snow' ? env.rain : 0);
   updateCompanions(dt);
 
   V.flash = Math.max(0, V.flash - dt * 4);
@@ -1092,6 +1235,9 @@ function frame(now) {
     blink: V.blink,
     flash: V.flash,
     miniFlash: V.miniFlash,
+    flashColor: S.flashColor,
+    env: typeof envNow !== 'undefined' ? envNow : null,
+    bolt: V.bolt,
     fade: V.fade,
     flicker: V.flicker,
     ghost: V.ghost,
@@ -1118,7 +1264,6 @@ function frame(now) {
 }
 
 /* ---------- 起動 ---------- */
-let hiddenAt = null;
 function start() {
   const had = load();
   Sprites.loadYuraImage('img/yura_pixel.png');
@@ -1146,9 +1291,11 @@ function start() {
   safe('仲間', () => buildCompanions());
   safe('転生', () => buildRebirth());
   safe('音量', () => setupVolume());
+  safe('フラッシュ', () => setupFlashColor());
   safe('パネル', () => setupSheets());
   safe('ランキング', () => setupRanking());
   safe('足音', setupStepEvent);
+  safe('時刻と天気', () => setupRealWorld());
   safe('タブ', setupTabs);
   // 実績機能より前のセーブは、達成済みの実績を通知なしで記録する
   checkAchievements(!S.achInit);
@@ -1165,8 +1312,8 @@ function start() {
 
   if (had) {
     log(`ゆらは「${STAGES[S.stage].name}」の探索を再開した。`);
-    const away = (Date.now() - S.lastSave) / 1000;
-    if (away > 30) grantOffline(away, true);
+    // 閉じていた時間 = 起動した時刻 − 最後に保存した時刻
+    grantOffline((Date.now() - S.lastSave) / 1000);
     checkDaily();
   } else {
     log('ゆらの心霊スポット巡りが始まった…');
@@ -1174,22 +1321,24 @@ function start() {
     checkDaily();
   }
 
-  // タブを閉じずに裏に回した場合も、戻ったときに経過分をまとめて計算
+  // タブを裏に回したとき：音を止めて保存するだけ。戻ってきても放置報酬は付けない
+  //（裏にある間は画面の更新が止まるので、収入も進まない）
   document.addEventListener('visibilitychange', () => {
     if (tabPaused) return;
     if (document.hidden) {
-      hiddenAt = Date.now();
       Sound.suspend();
       save();
-    } else if (hiddenAt) {
-      const away = (Date.now() - hiddenAt) / 1000;
-      hiddenAt = null;
+    } else {
       Sound.resume();
-      last = performance.now();
-      grantOffline(away, false);
+      last = performance.now(); // 裏にいた時間をまとめて進めない
       checkDaily(); // 日付が変わっていたらデイリーボーナス
     }
   });
+  // 裏に回したまま閉じられた（スマホでタブが自動で破棄された など）場合に、
+  // 裏にいた時間まで「閉じていた時間」に数えないよう、裏にいる間もときどき最終時刻を記録しておく
+  setInterval(() => {
+    if (document.hidden && !tabPaused) save();
+  }, 60 * 1000);
   window.addEventListener('pagehide', save);
   window.addEventListener('beforeunload', save);
 

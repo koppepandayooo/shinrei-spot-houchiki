@@ -214,21 +214,49 @@ const Sound = (() => {
     if (amb || !ensure()) return;
     const wind = loopNoise('lowpass', 400, 0.7);
     const falls = loopNoise('bandpass', 700, 0.6);
-    amb = { wind, falls, nextDrip: 1.5 };
+    const rain = loopNoise('highpass', 1800, 0.4); // 雨音（ザーッという高めの音）
+    const rainLow = loopNoise('lowpass', 900, 0.5); // 雨音の厚み
+    amb = { wind, falls, rain, rainLow, nextDrip: 1.5 };
     ambBus.gain.setTargetAtTime(1.4 * volAmb, now(), 1.2);
   }
   function drip(interior) {
     const f = 1300 + Math.random() * 1100;
     tone(f, 0.08, { vol: interior ? 0.03 : 0.018, to: f * 0.55, dest: ambBus, echo: interior });
   }
-  // 毎フレーム呼ぶ。interior:トンネル内か、falls:滝の近さ(0..1)
-  function ambientUpdate(dt, t, interior, falls) {
+  // 雷：遠くでゴロゴロと鳴る低い音
+  function thunder(near = 0.5, muffled = false) {
+    if (!ensure() || muted) return;
+    const t0 = now();
+    const dur = 2.8;
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuf;
+    src.loop = true; // 2秒のノイズをくり返して長く鳴らす
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.setValueAtTime(muffled ? 150 + 60 * near : 300 + 300 * near, t0); // 中では低くこもる
+    f.frequency.exponentialRampToValueAtTime(90, t0 + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    const k = muffled ? 0.5 : 1; // 中では小さく
+    g.gain.exponentialRampToValueAtTime((0.08 + 0.1 * near) * k, t0 + 0.08);
+    g.gain.setValueAtTime((0.06 + 0.07 * near) * k, t0 + 0.5);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(f).connect(g).connect(ambBus);
+    src.start(t0, Math.random() * 1.5);
+    src.stop(t0 + dur + 0.05);
+  }
+  // 毎フレーム呼ぶ。interior:トンネル内か、falls:滝の近さ(0..1)、rain:雨の強さ(0..1)
+  function ambientUpdate(dt, t, interior, falls, rain = 0) {
     if (!amb || muted || !ctx) return;
     const swell = 0.55 + 0.45 * Math.sin(t * 0.37) * Math.sin(t * 0.13 + 1);
     const windVol = (interior ? 0.022 : 0.035) * swell;
     amb.wind.g.gain.setTargetAtTime(windVol, now(), 0.4);
     amb.wind.f.frequency.setTargetAtTime(interior ? 240 : 380 + 140 * Math.sin(t * 0.21), now(), 0.5);
     amb.falls.g.gain.setTargetAtTime(0.06 * falls, now(), 0.4);
+    // トンネルの中では、外の雨音が小さく、高い音が抜けてこもって聞こえる
+    amb.rain.g.gain.setTargetAtTime((interior ? 0.003 : 0.03) * rain, now(), 0.8);
+    amb.rainLow.g.gain.setTargetAtTime((interior ? 0.016 : 0.025) * rain, now(), 0.8);
+    amb.rainLow.f.frequency.setTargetAtTime(interior ? 320 : 900, now(), 0.8);
     amb.nextDrip -= dt;
     if (amb.nextDrip <= 0) {
       drip(interior);
@@ -263,6 +291,6 @@ const Sound = (() => {
 
   return {
     shutter, buy, unlock, achievement, sweep, ghostAppear, ghostCatch, steps, chime,
-    ambientStart, ambientUpdate, setMuted, setVolumes, suspend, resume,
+    ambientStart, ambientUpdate, thunder, setMuted, setVolumes, suspend, resume,
   };
 })();

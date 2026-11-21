@@ -134,7 +134,24 @@ function updateCompanions(dt) {
 }
 
 /* ---------- 転生（お祓いを受けて出直す） ---------- */
-const rebirthGain = () => Math.floor(Math.sqrt(S.runTotal / REBIRTH.divisor));
+// 1周の稼ぎの記録値
+const runScore = (run = S.runTotal) =>
+  run > REBIRTH.base ? Math.floor(REBIRTH.perDecade * Math.log10(run / REBIRTH.base)) : 0;
+// 記録値が v になるのに必要な「今回の獲得フィルム」
+const rebirthNeed = (v) => REBIRTH.base * Math.pow(10, v / REBIRTH.perDecade);
+// いま転生したらもらえる踏破ボーナス（初回だけ）
+function firstBonusNow() {
+  let b = 0;
+  const list = [];
+  for (const id in REBIRTH.firstBonus) {
+    if (S.firstBonus[id] || !spotOpen(S, id)) continue;
+    b += REBIRTH.firstBonus[id];
+    list.push(STAGES[stageIndex(id)].name);
+  }
+  return { b, list };
+}
+// いま転生したらもらえる霊感（最高記録を超えた分＋踏破ボーナス）
+const rebirthGain = () => Math.max(0, runScore() - S.bestRunScore) + firstBonusNow().b;
 const canRebirth = () => S.unlocked >= REBIRTH.minSpots && rebirthGain() >= 1;
 function buildRebirth() {
   const box = document.createElement('div');
@@ -143,8 +160,10 @@ function buildRebirth() {
   box.innerHTML = `
     <h3>転生（お祓いを受けて出直す）</h3>
     <p class="note">フィルム・装備・解放したスポットが最初に戻るかわりに、<b>霊感</b>を得ます。霊感1につき、すべての収入が+10%（ずっと残ります）。仲間・心霊写真・実績は残ります。</p>
+    <p class="note">霊感は「1周で稼いだフィルム」の<b>最高記録を更新した分</b>だけ増えます。奥まで進んでたくさん稼いでから転生するほどお得です。初めて旧吹上隧道・八王子城跡まで行って転生したときは、踏破ボーナスもあります。</p>
     <dl class="rebirth-stats">
       <dt>いまの霊感</dt><dd id="rbNow">0</dd>
+      <dt>今回の記録／最高記録</dt><dd id="rbScore">0 / 0</dd>
       <dt>いま転生すると</dt><dd id="rbGain">+0</dd>
       <dt>転生後の収入</dt><dd id="rbMult">×1</dd>
     </dl>
@@ -156,8 +175,11 @@ function buildRebirth() {
 function refreshRebirth() {
   if (!$('#rbNow')) return;
   const g = rebirthGain();
+  const fb = firstBonusNow();
+  const cur = runScore();
   $('#rbNow').textContent = `${fmt(S.reikan)}（収入 ×${fmt(reikanMult())}）`;
-  $('#rbGain').textContent = `+${fmt(g)}`;
+  $('#rbScore').textContent = `${cur} / ${S.bestRunScore}`;
+  $('#rbGain').textContent = `+${fmt(g)}` + (fb.b ? `（踏破ボーナス+${fb.b}込み）` : '');
   $('#rbMult').textContent = `×${fmt(reikanMult(S.reikan + g))}`;
   const ok = canRebirth();
   $('#rbBtn').disabled = !ok;
@@ -165,21 +187,32 @@ function refreshRebirth() {
   $('#rbReq').textContent =
     S.unlocked < REBIRTH.minSpots
       ? `「${STAGES[REBIRTH.minSpots - 1].name}」を解放すると転生できるようになります。`
-      : g < 1
-        ? `今回の獲得フィルムが ${fmt(REBIRTH.divisor)} を超えると霊感が得られます。`
-        : `次の霊感+1まで：あと ${fmt(Math.pow(g + 1, 2) * REBIRTH.divisor - S.runTotal)} フィルム`;
+      : `最高記録を+1更新するまで：あと ${fmt(Math.max(0, rebirthNeed(Math.max(cur, S.bestRunScore) + 1) - S.runTotal))} フィルム`;
 }
-function doRebirth() {
+async function doRebirth() {
   if (!canRebirth()) return;
   const g = rebirthGain();
-  if (!confirm(`転生しますか？\n\n霊感 +${g}（収入 ×${fmt(reikanMult(S.reikan + g))} に）\n\nフィルム・装備・解放したスポットは最初に戻ります。\n仲間・心霊写真・実績は残ります。`)) return;
-  S.reikan += g;
+  const yes = await askConfirm({
+    title: '本当に転生しますか？',
+    html:
+      `霊感 <b>+${g}</b>（収入 ×${fmt(reikanMult())} → <b>×${fmt(reikanMult(S.reikan + g))}</b>）<br><br>` +
+      'フィルム・装備・解放したスポットは最初に戻ります。<br>仲間・心霊写真・実績は残ります。',
+    ok: '転生する',
+    cancel: 'やめる',
+  });
+  if (!yes || !canRebirth()) return;
+  const gainNow = rebirthGain();
+  const fbNow = firstBonusNow();
+  S.reikan += gainNow;
+  S.bestRunScore = Math.max(S.bestRunScore, runScore());
+  for (const id in REBIRTH.firstBonus) if (spotOpen(S, id)) S.firstBonus[id] = true;
   S.rebirths++;
   S.film = 0;
   S.runTotal = 0;
   for (const k in S.lv) S.lv[k] = 0;
   S.unlocked = 1;
   S.stage = 0;
+  S.secretOpen = false; // 隠しスポットは、八王子城跡まで登り直すとまた行ける
   V.ghost = null;
   V.scroll = 0;
   V.cycle = 0;
@@ -188,8 +221,8 @@ function doRebirth() {
   V.pray = 0;
   if (V.step) endStep('timeout');
   Sound.chime();
-  log(`お祓いを受けて、ゆらは出直すことにした。 霊感 +${g}`, 'gold');
-  showModal('転生しました', `霊感 <b>+${g}</b>（合計 ${fmt(S.reikan)}）<br>これからの収入は <b>×${fmt(reikanMult())}</b> になります。<br><br><small>旧小峰トンネルからやり直し。仲間たちも一緒です。</small>`);
+  log(`お祓いを受けて、ゆらは出直すことにした。 霊感 +${gainNow}` + (fbNow.b ? `（踏破ボーナス：${fbNow.list.join('・')}）` : ''), 'gold');
+  showModal('転生しました', `霊感 <b>+${gainNow}</b>（合計 ${fmt(S.reikan)}）` + (fbNow.b ? `<br><small>踏破ボーナス +${fbNow.b}（${fbNow.list.join('・')}）を含みます</small>` : '') + `<br>これからの収入は <b>×${fmt(reikanMult())}</b> になります。<br><br><small>${STAGES[0].name}からやり直し。仲間たちも一緒です。</small>`);
   buildSpots();
   buildCollection();
   refreshCompanions();
@@ -197,6 +230,21 @@ function doRebirth() {
   refreshUI(true);
   save();
   autoSubmit();
+}
+
+/* ---------- 表示の設定：撮影フラッシュの色（白／黒） ---------- */
+function setupFlashColor() {
+  const btns = document.querySelectorAll('.flash-color button');
+  const sync = () => btns.forEach((b) => b.classList.toggle('active', b.dataset.color === S.flashColor));
+  btns.forEach((b) =>
+    b.addEventListener('click', () => {
+      S.flashColor = b.dataset.color;
+      sync();
+      V.flash = 0.55; // 試しに光らせる
+      save();
+    })
+  );
+  sync();
 }
 
 /* ---------- 音量 ---------- */
@@ -330,7 +378,7 @@ function scorePayload() {
     id: ensurePlayerId(),
     name: S.playerName,
     score: Math.floor(S.total),
-    spot: S.unlocked,
+    spot: S.secretOpen ? STAGES.length : S.unlocked,
     rebirths: S.rebirths,
     photos: S.ghosts,
   });
@@ -367,7 +415,7 @@ function setupRanking() {
   // 5分ごとに、スコアが増えていれば自動送信
   setInterval(() => {
     if (!document.hidden) autoSubmit();
-  }, 5 * 60 * 1000);
+  }, 60 * 1000);
   // ゲームを閉じる・裏に回すときにも送る（ページが閉じても届く sendBeacon を使う）
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) beaconSubmit();
@@ -459,7 +507,7 @@ async function openRanking() {
   }
   await loadRanking();
 }
-const SPOT_SHORT = ['旧小峰', '道了堂', '八王子城', '旧吹上', '旧旧吹上'];
+const SPOT_SHORT = ['電話ボックス', '陵北大橋', '旧満地', '道了堂', '旧小峰', '旧吹上', '八王子城', '旧旧吹上'];
 function renderRankRows(list, entries) {
   list.innerHTML = '';
   if (!entries.length) list.innerHTML = '<li class="rank-empty">まだ誰も登録していません。一番乗りのチャンス！</li>';
@@ -474,11 +522,14 @@ function renderRankRows(list, entries) {
     nm.textContent = e.name;
     const meta = document.createElement('span');
     meta.className = 'rank-meta';
-    meta.textContent = `${SPOT_SHORT[(e.spot || 1) - 1] || ''}${e.rebirths ? `・転生${e.rebirths}` : ''}`;
+    meta.textContent = SPOT_SHORT[(e.spot || 1) - 1] || '';
     const sc = document.createElement('span');
     sc.className = 'rank-score';
     sc.textContent = fmt(e.score);
-    li.append(no, nm, meta, sc);
+    const rb = document.createElement('span');
+    rb.className = 'rank-rb';
+    rb.textContent = `転生${e.rebirths || 0}`;
+    li.append(no, nm, meta, sc, rb);
     list.appendChild(li);
   });
 }
@@ -497,10 +548,7 @@ async function deleteRankingEntry(id) {
 }
 // 常に表示するランキング（上位10人と自分の順位）
 // 参加者が少ないうちは、PCでは1行の細い帯にする
-const BOARD_FULL_FROM = 4; // この人数以上で2列の大きい表示
 function renderBoard(data) {
-  const few = data.entries.length < BOARD_FULL_FROM;
-  document.querySelectorAll('.rank-board').forEach((b) => b.classList.toggle('slim', few));
   document.querySelectorAll('.rb-list').forEach((el) => renderRankRows(el, data.entries.slice(0, 10)));
   const me = data.me ? `${S.playerName || 'あなた'}：${data.me.rank}位` : S.playerName ? '' : '未参加';
   document.querySelectorAll('.rb-me').forEach((el) => (el.textContent = me));
@@ -528,7 +576,7 @@ function setupBoard() {
   // 1分ごとに更新（画面が見えているときだけ）
   setInterval(() => {
     if (!document.hidden) loadBoard();
-  }, 60 * 1000);
+  }, 30 * 1000);
 }
 async function loadRanking() {
   if (!RANKING_API) return;
