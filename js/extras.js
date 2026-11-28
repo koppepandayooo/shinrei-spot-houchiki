@@ -389,9 +389,10 @@ const RANK_AUTO_EVERY = 30 * 60 * 1000; // ランキングの更新の間隔
  *  → だれの画面でも、同じ時刻に同じランキングに切り替わる */
 const rankSlot = (t = Date.now()) => Math.ceil((t + 1) / RANK_AUTO_EVERY) * RANK_AUTO_EVERY; // 次の更新時刻
 const RANK_SEND_JITTER = 50 * 1000;
+const RANK_REGULAR_EVERY = 5 * 60 * 1000; // 0分・30分のほかにも、5分ごとに送る
 function scheduleRank() {
   const slot = rankSlot();
-  rankLoadAt = slot + 3000;
+  rankLoadAt = slot + 5000; // サーバーが0分・30分の一覧を保存したあとに読む
   rankSendAt = slot - 60 * 1000 + Math.floor(Math.random() * RANK_SEND_JITTER);
   if (rankSendAt <= Date.now()) rankSendAt = Date.now() + 1000;
 }
@@ -535,14 +536,21 @@ function setupRanking() {
   updateRankUI();
   if (!enabled) return;
   setupBoard();
-  // 毎時0分・30分の更新（送信は画面が見えているときだけ）
+  // 送信：起動したとき・5分ごと・0分／30分の少し前（スコアが変わっていれば）。
+  // 表示はサーバーが0分・30分の時点で固定した一覧なので、こまめに送っても早く切り替わることはない
   scheduleRank();
   let sentForSlot = false;
+  let nextRegular = Date.now() + RANK_REGULAR_EVERY;
+  setTimeout(() => S.playerName && rankDirty() && queueSubmit(), 3000);
   setInterval(() => {
     const now = Date.now();
     if (!sentForSlot && now >= rankSendAt) {
       sentForSlot = true;
-      if (!document.hidden && rankDirty()) queueSubmit();
+      if (rankDirty()) queueSubmit();
+    }
+    if (now >= nextRegular) {
+      nextRegular = now + RANK_REGULAR_EVERY;
+      if (rankDirty()) queueSubmit();
     }
     if (now >= rankLoadAt) {
       if (!document.hidden) loadBoard();

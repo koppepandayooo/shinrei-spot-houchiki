@@ -1,7 +1,7 @@
 /**
  * 心霊スポット放置記 ランキング API（Cloudflare Workers + D1）
  *
- *   GET  /api/ranking?limit=50&id=<playerId>  … 上位のランキング（id を付けると自分の順位も返す）
+ *   GET  /api/ranking?limit=50&id=<playerId>  … 毎時0分・30分の時点で固定したランキング（id を付けると自分の順位も返す）
  *   POST /api/score                           … スコアを送信（同じ id は最高記録だけ残す）
  *   POST /api/delete                          … 自分の記録を削除（ゲームのデータ削除のとき）
  *   GET  /api/chat?after=<番号>               … チャットの最新の書き込み（after より新しいものだけ）
@@ -13,12 +13,18 @@
  */
 
 const NAME_MAX = 12;
-const MIN_INTERVAL_MS = 20_000; // 同じ id / IP からの送信は20秒に1回まで
+const MIN_INTERVAL_MS = 20_000; // 同じ id からの送信は20秒に1回まで
+const IP_INTERVAL_MS = 2_000; // 同じ IP（同じ家の回線など）からは2秒に1回まで。兄弟で遊んでいても弾かれにくいように
+const SLOT_MS = 30 * 60 * 1000; // ランキングを固定する間隔（毎時0分・30分）
 const MAX_BODY = 2048;
 const MAX_SCORE = 1e300;
 const ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export default {
+  // 毎時0分・30分（Cron トリガー）に、その時点のランキングを保存する
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(ensureSnapshot(env, slotOf(event.scheduledTime || Date.now())));
+  },
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const cors = corsHeaders(request.headers.get('Origin'), env);
@@ -82,13 +88,36 @@ function json(data, status, cors, extra = {}) {
   });
 }
 
+/* ---------- 0分・30分の時点で固定したランキング ----------
+ * スコアの送信はいつでも受け付けて scores に最新の値を持つ。表示用には、毎時0分・30分の時点の
+ * scores をまるごと snap_scores に写しておき、ランキングはいつもそこから返す。
+ * → いつ開いた人にも、同じ一覧・同じ順位が見える */
+const slotOf = (t) => Math.floor(t / SLOT_MS) * SLOT_MS;
+async function ensureSnapshot(env, slot) {
+  // 1つのトランザクションで「まだその回の保存がなければ保存」する（同時に来ても二重にならない）
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO snap_scores (slot, id, name, score, spot, rebirths, photos, updated)
+       SELECT ?, id, name, score, spot, rebirths, photos, updated FROM scores
+       WHERE NOT EXISTS (SELECT 1 FROM snap_meta WHERE slot = ?)`
+    ).bind(slot, slot),
+    env.DB.prepare('INSERT OR IGNORE INTO snap_meta (slot, at) VALUES (?, ?)').bind(slot, Date.now()),
+    // 古い回の保存は消す（直近の2回分だけ残す）
+    env.DB.prepare('DELETE FROM snap_scores WHERE slot < ?').bind(slot - SLOT_MS),
+    env.DB.prepare('DELETE FROM snap_meta WHERE slot < ?').bind(slot - SLOT_MS),
+  ]);
+}
 async function getRanking(url, env, cors) {
   const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get('limit') || '50', 10) || 50));
   const id = url.searchParams.get('id') || '';
+  const slot = slotOf(Date.now());
+  // Cron が遅れたときなどに備えて、その回の保存がまだなければここで作る
+  const has = await env.DB.prepare('SELECT 1 AS ok FROM snap_meta WHERE slot = ?').bind(slot).first();
+  if (!has) await ensureSnapshot(env, slot);
   const { results } = await env.DB.prepare(
-    'SELECT id, name, score, spot, rebirths, photos FROM scores ORDER BY score DESC, updated ASC LIMIT ?'
+    'SELECT id, name, score, spot, rebirths, photos FROM snap_scores WHERE slot = ? ORDER BY score DESC, updated ASC LIMIT ?'
   )
-    .bind(limit)
+    .bind(slot, limit)
     .all();
   const entries = results.map((r, i) => ({
     rank: i + 1,
@@ -102,13 +131,14 @@ async function getRanking(url, env, cors) {
   let me = null;
   if (ID_RE.test(id)) {
     const row = await env.DB.prepare(
-      'SELECT score, (SELECT COUNT(*) FROM scores s2 WHERE s2.score > s1.score) + 1 AS rank FROM scores s1 WHERE id = ?'
+      'SELECT score, (SELECT COUNT(*) FROM snap_scores s2 WHERE s2.slot = s1.slot AND s2.score > s1.score) + 1 AS rank FROM snap_scores s1 WHERE slot = ? AND id = ?'
     )
-      .bind(id)
+      .bind(slot, id)
       .first();
     if (row) me = { rank: row.rank, score: row.score };
   }
-  return json({ entries, me }, 200, cors, { 'Cache-Control': 'no-store' });
+  // slot：この一覧が「何時何分の時点」のものか
+  return json({ entries, me, slot }, 200, cors, { 'Cache-Control': 'no-store' });
 }
 
 async function postScore(request, env, cors) {
@@ -142,10 +172,9 @@ async function postScore(request, env, cors) {
   const now = Date.now();
   const ipKey = 'ip:' + (await sha256Hex((request.headers.get('CF-Connecting-IP') || 'unknown') + (env.IP_SALT || ''))).slice(0, 24);
   const idKey = 'id:' + id;
-  const recent = await env.DB.prepare('SELECT COUNT(*) AS n FROM rate WHERE key IN (?, ?) AND at > ?')
-    .bind(idKey, ipKey, now - MIN_INTERVAL_MS)
-    .first();
-  if (recent && recent.n > 0) return json({ error: 'too_many_requests' }, 429, cors, { 'Retry-After': '20' });
+  if ((await rateLimited(env, [idKey], MIN_INTERVAL_MS, now)) || (await rateLimited(env, [ipKey], IP_INTERVAL_MS, now))) {
+    return json({ error: 'too_many_requests' }, 429, cors, { 'Retry-After': '20' });
+  }
 
   // 保存（同じ id は最高記録を残す）
   await env.DB.batch([

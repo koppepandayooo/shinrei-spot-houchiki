@@ -36,3 +36,21 @@ CREATE TABLE IF NOT EXISTS feedback (
   version TEXT NOT NULL DEFAULT '', -- ゲームのバージョン
   at INTEGER NOT NULL
 );
+
+-- 毎時0分・30分の時点で固定したランキング（表示はいつもここから。直近2回分だけ残す）
+CREATE TABLE IF NOT EXISTS snap_meta (
+  slot INTEGER PRIMARY KEY,      -- 何時何分の時点か（ミリ秒）
+  at INTEGER NOT NULL            -- 実際に保存した時刻
+);
+CREATE TABLE IF NOT EXISTS snap_scores (
+  slot INTEGER NOT NULL,
+  id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  score REAL NOT NULL,
+  spot INTEGER NOT NULL DEFAULT 1,
+  rebirths INTEGER NOT NULL DEFAULT 0,
+  photos INTEGER NOT NULL DEFAULT 0,
+  updated INTEGER NOT NULL,
+  PRIMARY KEY (slot, id)
+);
+CREATE INDEX IF NOT EXISTS idx_snap_score ON snap_scores (slot, score DESC);

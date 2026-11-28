@@ -14,6 +14,8 @@
     // ランキングのシーズン番号。リセットするときに1つ増やし、js/config.js の RANK_SEASON も同じにする
     "RANK_SEASON": "2"
   },
+  // 毎時0分・30分に、その時点のランキングを保存する
+  "triggers": { "crons": ["0,30 * * * *"] },
   "d1_databases": [
     {
       "binding": "DB",
